@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { CAR_PHYSICS, TRACK_CONFIG } from '../config';
 import { OvalTrack, type TrackSample } from '../track/OvalTrack';
 
+type TrailPoint = { x: number; y: number };
+
 export class Car extends Phaser.GameObjects.Container {
   private distance = 110;
   private speed = 0;
@@ -12,6 +14,9 @@ export class Car extends Phaser.GameObjects.Container {
   private crashVx = 0;
   private crashVy = 0;
   private crashAngularVelocity = 0;
+  private readonly trail: Phaser.GameObjects.Graphics;
+  private readonly trailPoints: TrailPoint[] = [];
+  private readonly bodyGlow: Phaser.GameObjects.Graphics;
 
   constructor(
     scene: Phaser.Scene,
@@ -21,6 +26,9 @@ export class Car extends Phaser.GameObjects.Container {
     super(scene, 0, 0);
     scene.add.existing(this);
     this.setDepth(20);
+
+    this.trail = scene.add.graphics().setDepth(14).setBlendMode(Phaser.BlendModes.ADD);
+    this.bodyGlow = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     this.buildLeMansPrototype();
     this.placeOnTrack();
   }
@@ -30,6 +38,7 @@ export class Car extends Phaser.GameObjects.Container {
 
     if (this.crashed) {
       this.updateCrash(deltaMs, dt);
+      this.updateTrail();
       return;
     }
 
@@ -62,15 +71,26 @@ export class Car extends Phaser.GameObjects.Container {
         )
       : 0;
 
-    if (sample.inCurve && speedRatio > CAR_PHYSICS.offTrackRatio && this.invulnerableMs <= 0) {
+    const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
+    if (
+      sample.inCurve &&
+      throttle &&
+      atAbsoluteLimit &&
+      speedRatio > CAR_PHYSICS.offTrackRatio &&
+      this.invulnerableMs <= 0
+    ) {
       this.beginCrash(sample);
+      this.updateTrail();
       return;
     }
 
-    const lateralSlip = this.driftAmount * 10;
-    const yaw = this.driftAmount * 0.16;
+    const lateralSlip = this.driftAmount * 25;
+    const yaw = this.driftAmount * 0.48;
     this.setPosition(sample.x + sample.outwardX * lateralSlip, sample.y + sample.outwardY * lateralSlip);
     this.setRotation(sample.angle + yaw);
+
+    this.updateGlow();
+    this.updateTrail();
   }
 
   getDistance(): number {
@@ -96,12 +116,16 @@ export class Car extends Phaser.GameObjects.Container {
 
     const tangentX = Math.cos(sample.angle);
     const tangentY = Math.sin(sample.angle);
-    this.crashVx = tangentX * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardX * CAR_PHYSICS.crashOutwardImpulse;
-    this.crashVy = tangentY * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardY * CAR_PHYSICS.crashOutwardImpulse;
+    this.crashVx =
+      tangentX * this.speed * CAR_PHYSICS.crashForwardRetention +
+      sample.outwardX * CAR_PHYSICS.crashOutwardImpulse;
+    this.crashVy =
+      tangentY * this.speed * CAR_PHYSICS.crashForwardRetention +
+      sample.outwardY * CAR_PHYSICS.crashOutwardImpulse;
     this.crashAngularVelocity = CAR_PHYSICS.crashSpin;
 
-    this.setPosition(sample.x + sample.outwardX * 10, sample.y + sample.outwardY * 10);
-    this.setRotation(sample.angle + 0.12);
+    this.setPosition(sample.x + sample.outwardX * 12, sample.y + sample.outwardY * 12);
+    this.setRotation(sample.angle + 0.2);
   }
 
   private updateCrash(deltaMs: number, dt: number): void {
@@ -114,10 +138,11 @@ export class Car extends Phaser.GameObjects.Container {
     this.x += this.crashVx * dt;
     this.y += this.crashVy * dt;
     this.rotation += this.crashAngularVelocity * dt;
-    this.crashAngularVelocity *= Math.pow(0.78, dt * 10);
+    this.crashAngularVelocity *= Math.pow(0.8, dt * 10);
 
     const t = Phaser.Math.Clamp(this.crashTimerMs / CAR_PHYSICS.respawnDelayMs, 0, 1);
-    this.alpha = 1 - t * 0.22;
+    this.alpha = 1 - t * 0.25;
+    this.updateGlow();
 
     if (t >= 1) {
       this.crashed = false;
@@ -133,22 +158,66 @@ export class Car extends Phaser.GameObjects.Container {
     const sample = this.track.sample(this.distance, this.lane);
     this.setPosition(sample.x, sample.y);
     this.setRotation(sample.angle);
+    this.trailPoints.length = 0;
+    this.updateGlow();
+  }
+
+  private updateGlow(): void {
+    const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
+    this.bodyGlow.clear();
+    if (ratio < 0.04) return;
+
+    this.bodyGlow.fillStyle(0x00eaff, 0.06 + ratio * 0.12);
+    this.bodyGlow.fillEllipse(-8, 0, 95 + ratio * 45, 48 + ratio * 16);
+    this.bodyGlow.fillStyle(0x9b4dff, 0.035 + ratio * 0.08);
+    this.bodyGlow.fillEllipse(-18, 0, 130 + ratio * 70, 62 + ratio * 20);
+  }
+
+  private updateTrail(): void {
+    const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
+    const desiredPoints = Math.round(2 + ratio * 34);
+
+    this.trailPoints.push({ x: this.x, y: this.y });
+    while (this.trailPoints.length > desiredPoints) this.trailPoints.shift();
+
+    this.trail.clear();
+    if (this.trailPoints.length < 2 || ratio < 0.05) return;
+
+    for (let i = 1; i < this.trailPoints.length; i += 1) {
+      const a = this.trailPoints[i - 1];
+      const b = this.trailPoints[i];
+      const progress = i / (this.trailPoints.length - 1);
+      const alpha = progress * progress * (0.06 + ratio * 0.34);
+      const width = 2 + progress * (3 + ratio * 10);
+
+      this.trail.lineStyle(width * 2.8, 0x7b2cff, alpha * 0.2);
+      this.trail.beginPath();
+      this.trail.moveTo(a.x, a.y);
+      this.trail.lineTo(b.x, b.y);
+      this.trail.strokePath();
+
+      this.trail.lineStyle(width, 0x00eaff, alpha);
+      this.trail.beginPath();
+      this.trail.moveTo(a.x, a.y);
+      this.trail.lineTo(b.x, b.y);
+      this.trail.strokePath();
+    }
   }
 
   private buildLeMansPrototype(): void {
     const shadow = this.scene.add.graphics();
-    shadow.fillStyle(0x000000, 0.3);
+    shadow.fillStyle(0x000000, 0.35);
     shadow.fillEllipse(4, 5, 66, 28);
 
     const wheels = this.scene.add.graphics();
-    wheels.fillStyle(0x08090a, 1);
+    wheels.fillStyle(0x05070a, 1);
     wheels.fillRoundedRect(-24, -18, 17, 7, 2);
     wheels.fillRoundedRect(-24, 11, 17, 7, 2);
     wheels.fillRoundedRect(11, -17, 15, 6, 2);
     wheels.fillRoundedRect(11, 11, 15, 6, 2);
 
     const body = this.scene.add.graphics();
-    body.fillStyle(0xf0f2f4, 1);
+    body.fillStyle(0xeafcff, 1);
     body.beginPath();
     body.moveTo(36, 0);
     body.lineTo(25, -12);
@@ -164,32 +233,32 @@ export class Car extends Phaser.GameObjects.Container {
     body.closePath();
     body.fillPath();
 
-    body.fillStyle(0xd9212b, 1);
-    body.fillTriangle(36, 0, 14, -7, 14, 7);
-    body.fillRoundedRect(-29, -3, 44, 6, 3);
+    body.fillStyle(0x00d9ff, 1);
+    body.fillTriangle(36, 0, 13, -7, 13, 7);
+    body.fillRoundedRect(-30, -2.6, 43, 5.2, 2);
 
-    body.fillStyle(0x141a1f, 1);
+    body.fillStyle(0x111827, 1);
     body.fillRoundedRect(-4, -8, 18, 16, 7);
-    body.fillStyle(0x76a7bd, 0.82);
+    body.fillStyle(0x8cf7ff, 0.84);
     body.fillRoundedRect(2, -6, 9, 12, 4);
 
-    body.fillStyle(0xf5d45c, 1);
+    body.fillStyle(0xff3df2, 1);
     body.fillCircle(25, -8, 3);
     body.fillCircle(25, 8, 3);
 
-    body.fillStyle(0x111315, 1);
+    body.fillStyle(0x0c1118, 1);
     body.fillRect(-36, -17, 6, 34);
-    body.fillStyle(0xf0f2f4, 1);
+    body.fillStyle(0x00eaff, 1);
     body.fillRect(-38, -14, 4, 28);
 
     const number = this.scene.add
       .text(-13, 0, '7', {
         fontFamily: 'Arial Black, sans-serif',
         fontSize: '12px',
-        color: '#111318',
+        color: '#08101a',
       })
       .setOrigin(0.5);
 
-    this.add([shadow, wheels, body, number]);
+    this.add([this.bodyGlow, shadow, wheels, body, number]);
   }
 }
