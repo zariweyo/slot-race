@@ -18,6 +18,12 @@ export class GameScene extends Phaser.Scene {
   private speedText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private throttleButton!: Phaser.GameObjects.Container;
+  private trailValueText!: Phaser.GameObjects.Text;
+  private trailKnob!: Phaser.GameObjects.Arc;
+  private trailScale = 1;
+  private readonly trailSliderX = 500;
+  private readonly trailSliderY = 64;
+  private readonly trailSliderWidth = 240;
 
   constructor() {
     super('game');
@@ -28,9 +34,11 @@ export class GameScene extends Phaser.Scene {
     this.track.draw();
 
     this.car = new Car(this, this.track, 0);
+    this.car.setTrailScale(this.trailScale);
     this.lapTimer.start(this.time.now, this.car.getDistance());
 
     this.createHud();
+    this.createTrailSlider();
     this.createThrottleButton();
 
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -84,7 +92,7 @@ export class GameScene extends Phaser.Scene {
     this.add.text(GAME_WIDTH - 47, 93, 'KM/H', this.hudStyle(13, '#76edff')).setOrigin(1, 0).setDepth(41);
 
     this.statusText = this.add
-      .text(GAME_WIDTH / 2, 67, '', {
+      .text(GAME_WIDTH / 2, 112, '', {
         fontFamily: 'Arial Black, sans-serif',
         fontSize: '29px',
         color: '#ff45e9',
@@ -99,6 +107,44 @@ export class GameScene extends Phaser.Scene {
       .text(38, GAME_HEIGHT - 37, 'HOLD TO PUSH THE LIMIT', this.hudStyle(13, '#77ddeb'))
       .setOrigin(0, 1)
       .setDepth(41);
+  }
+
+  private createTrailSlider(): void {
+    const x = this.trailSliderX;
+    const y = this.trailSliderY;
+    const width = this.trailSliderWidth;
+
+    const panel = this.add.rectangle(x - 26, y - 28, width + 126, 74, 0x050914, 0.82).setOrigin(0).setDepth(42);
+    panel.setStrokeStyle(1, 0x22dfff, 0.35);
+
+    this.add.text(x, y - 18, 'TRAIL', this.hudStyle(12, '#77ddeb')).setDepth(43);
+
+    const track = this.add.rectangle(x, y + 10, width, 6, 0x14304b, 1).setOrigin(0, 0.5).setDepth(43);
+    track.setStrokeStyle(1, 0x00dfff, 0.45);
+
+    this.trailKnob = this.add.circle(x + width, y + 10, 12, 0xeaffff, 1).setDepth(44);
+    this.trailKnob.setStrokeStyle(4, 0x00dfff, 0.9);
+    this.trailKnob.setInteractive({ draggable: true, useHandCursor: true });
+
+    this.trailValueText = this.add
+      .text(x + width + 24, y + 1, '100%', this.hudStyle(14, '#eaffff'))
+      .setDepth(43);
+
+    const updateFromX = (pointerX: number): void => {
+      const clamped = Phaser.Math.Clamp(pointerX, x, x + width);
+      this.trailScale = (clamped - x) / width;
+      this.trailKnob.x = clamped;
+      const percent = Math.round(this.trailScale * 100);
+      this.trailValueText.setText(`${percent}%`);
+      this.car.setTrailScale(this.trailScale);
+    };
+
+    this.trailKnob.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number) => {
+      updateFromX(dragX);
+    });
+
+    track.setInteractive({ useHandCursor: true });
+    track.on('pointerdown', (pointer: Phaser.Input.Pointer) => updateFromX(pointer.x));
   }
 
   private createThrottleButton(): void {
@@ -147,8 +193,6 @@ export class GameScene extends Phaser.Scene {
 
     if (this.car.isCrashed()) {
       this.statusText.setText('LIMIT BROKEN');
-    } else if (this.car.isDrifting()) {
-      this.statusText.setText('DRIFT');
     } else {
       this.statusText.setText('');
     }
