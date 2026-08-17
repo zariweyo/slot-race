@@ -16,6 +16,7 @@ export class OvalTrack {
 
   private readonly straightLength: number;
   private readonly arcLength: number;
+  private fxObjects: Phaser.GameObjects.GameObject[] = [];
 
   constructor(private readonly scene: Phaser.Scene) {
     this.straightLength = TRACK_CONFIG.halfStraight * 2;
@@ -64,6 +65,17 @@ export class OvalTrack {
     this.drawEnergyPosts();
     this.drawStartFinish();
     this.drawScenery();
+
+    // Capture only track objects created up to this point that use additive blending.
+    // The car is created after track.draw(), so it is intentionally excluded.
+    this.fxObjects = this.scene.children.list.filter((obj) => {
+      const blendMode = (obj as Phaser.GameObjects.GameObject & { blendMode?: number }).blendMode;
+      return blendMode === Phaser.BlendModes.ADD;
+    });
+  }
+
+  setFxEnabled(enabled: boolean): void {
+    this.fxObjects.forEach((obj) => obj.setVisible(enabled));
   }
 
   sample(distance: number, lane = 0): TrackSample {
@@ -112,13 +124,7 @@ export class OvalTrack {
     };
   }
 
-  private strokeTrack(
-    graphics: Phaser.GameObjects.Graphics,
-    offset: number,
-    width: number,
-    color: number,
-    alpha: number,
-  ): void {
+  private strokeTrack(graphics: Phaser.GameObjects.Graphics, offset: number, width: number, color: number, alpha: number): void {
     graphics.lineStyle(width, color, alpha);
     this.traceTrack(graphics, offset);
     graphics.strokePath();
