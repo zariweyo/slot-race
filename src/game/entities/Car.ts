@@ -4,6 +4,7 @@ import { OvalTrack, type TrackSample } from '../track/OvalTrack';
 
 export class Car extends Phaser.GameObjects.Container {
   private distance = 110;
+  private visualDistance = 110;
   private speed = 0;
   private crashed = false;
   private crashTimerMs = 0;
@@ -11,20 +12,26 @@ export class Car extends Phaser.GameObjects.Container {
   private crashVx = 0;
   private crashVy = 0;
   private crashAngularVelocity = 0;
-  private readonly tail: Phaser.GameObjects.Graphics;
+  private readonly trail: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, private readonly track: OvalTrack, private readonly lane = 0) {
     super(scene, 0, 0);
     scene.add.existing(this);
     this.setDepth(20);
-    this.tail = scene.add.graphics().setDepth(14).setBlendMode(Phaser.BlendModes.ADD);
+    this.trail = scene.add.graphics().setDepth(14).setBlendMode(Phaser.BlendModes.ADD);
     this.buildPhoton();
     this.placeOnTrack();
   }
 
   updateCar(deltaMs: number, throttle: boolean): void {
-    const dt = Math.min(deltaMs / 1000, 0.05);
-    if (this.crashed) { this.updateCrash(deltaMs, dt); this.drawTail(); return; }
+    const dt = Math.min(deltaMs / 1000, 0.04);
+
+    if (this.crashed) {
+      this.updateCrash(deltaMs, dt);
+      this.drawTrail();
+      return;
+    }
+
     this.speed += (throttle ? CAR_PHYSICS.acceleration : -CAR_PHYSICS.coastDrag) * dt;
     this.speed = Phaser.Math.Clamp(this.speed, 0, CAR_PHYSICS.maxSpeed);
     this.distance = Phaser.Math.Wrap(this.distance + this.speed * dt, 0, this.track.totalLength);
@@ -32,27 +39,50 @@ export class Car extends Phaser.GameObjects.Container {
     if (this.invulnerableMs > 0) {
       this.invulnerableMs = Math.max(0, this.invulnerableMs - deltaMs);
       this.alpha = Math.floor(this.invulnerableMs / 105) % 2 === 0 ? 0.32 : 1;
-    } else this.alpha = 1;
-
-    const sample = this.track.sample(this.distance, this.lane);
-    const effectiveRadius = sample.curvature > 0 ? 1 / sample.curvature : TRACK_CONFIG.radius;
-    const curveLimit = CAR_PHYSICS.curveBaseLimit * Math.sqrt(effectiveRadius / TRACK_CONFIG.radius);
-    const speedRatio = sample.inCurve ? this.speed / curveLimit : 0;
-    const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
-
-    if (sample.inCurve && throttle && atAbsoluteLimit && speedRatio > CAR_PHYSICS.offTrackRatio && this.invulnerableMs <= 0) {
-      this.beginCrash(sample); this.drawTail(); return;
+    } else {
+      this.alpha = 1;
     }
 
-    this.setPosition(sample.x, sample.y);
-    this.setRotation(sample.angle);
-    this.drawTail();
+    const physicsSample = this.track.sample(this.distance, this.lane);
+    const effectiveRadius = physicsSample.curvature > 0 ? 1 / physicsSample.curvature : TRACK_CONFIG.radius;
+    const curveLimit = CAR_PHYSICS.curveBaseLimit * Math.sqrt(effectiveRadius / TRACK_CONFIG.radius);
+    const speedRatio = physicsSample.inCurve ? this.speed / curveLimit : 0;
+    const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
+
+    if (
+      physicsSample.inCurve &&
+      throttle &&
+      atAbsoluteLimit &&
+      speedRatio > CAR_PHYSICS.offTrackRatio &&
+      this.invulnerableMs <= 0
+    ) {
+      this.beginCrash(physicsSample);
+      this.drawTrail();
+      return;
+    }
+
+    this.updateVisualDistance(deltaMs);
+    const visualSample = this.track.sample(this.visualDistance, this.lane);
+    this.setPosition(visualSample.x, visualSample.y);
+    this.setRotation(visualSample.angle);
+    this.drawTrail();
   }
 
   getDistance(): number { return this.distance; }
   getSpeed(): number { return this.speed; }
   isDrifting(): boolean { return false; }
   isCrashed(): boolean { return this.crashed; }
+
+  private updateVisualDistance(deltaMs: number): void {
+    const length = this.track.totalLength;
+    let delta = this.distance - this.visualDistance;
+    if (delta > length / 2) delta -= length;
+    if (delta < -length / 2) delta += length;
+
+    // Exponential interpolation: frame-rate independent and still responsive at top speed.
+    const smoothing = 1 - Math.exp(-deltaMs / 28);
+    this.visualDistance = Phaser.Math.Wrap(this.visualDistance + delta * smoothing, 0, length);
+  }
 
   private beginCrash(sample: TrackSample): void {
     this.crashed = true;
@@ -62,6 +92,7 @@ export class Car extends Phaser.GameObjects.Container {
     this.crashVx = tangentX * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardX * CAR_PHYSICS.crashOutwardImpulse;
     this.crashVy = tangentY * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardY * CAR_PHYSICS.crashOutwardImpulse;
     this.crashAngularVelocity = CAR_PHYSICS.crashSpin;
+    this.visualDistance = this.distance;
     this.setPosition(sample.x, sample.y);
     this.setRotation(sample.angle);
   }
@@ -75,6 +106,7 @@ export class Car extends Phaser.GameObjects.Container {
     this.y += this.crashVy * dt;
     this.rotation += this.crashAngularVelocity * dt;
     this.crashAngularVelocity *= Math.pow(0.82, dt * 10);
+
     const t = Phaser.Math.Clamp(this.crashTimerMs / CAR_PHYSICS.respawnDelayMs, 0, 1);
     this.alpha = 1 - t * 0.24;
     if (t >= 1) {
@@ -88,39 +120,64 @@ export class Car extends Phaser.GameObjects.Container {
   }
 
   private placeOnTrack(): void {
-    const sample = this.track.sample(this.distance, this.lane);
+    this.visualDistance = this.distance;
+    const sample = this.track.sample(this.visualDistance, this.lane);
     this.setPosition(sample.x, sample.y);
     this.setRotation(sample.angle);
-    this.drawTail();
+    this.drawTrail();
   }
 
-  private drawTail(): void {
-    this.tail.clear();
+  private drawTrail(): void {
+    this.trail.clear();
     if (this.crashed) return;
+
     const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
-    if (ratio < 0.03) return;
-    const tailLength = 14 + ratio * 210;
-    const segments = Math.round(8 + ratio * 28);
-    for (let i = segments; i > 0; i -= 1) {
-      const t0 = i / segments;
-      const t1 = (i - 1) / segments;
-      const a = this.track.sample(this.distance - tailLength * t0, this.lane);
-      const b = this.track.sample(this.distance - tailLength * t1, this.lane);
-      const progress = 1 - t0;
-      const alpha = 0.035 + progress * progress * (0.18 + ratio * 0.5);
-      const width = 1.5 + progress * (2.5 + ratio * 8);
-      this.tail.lineStyle(width * 3.2, 0x00bfff, alpha * 0.14);
-      this.tail.beginPath(); this.tail.moveTo(a.x, a.y); this.tail.lineTo(b.x, b.y); this.tail.strokePath();
-      this.tail.lineStyle(width, 0x54f7ff, alpha);
-      this.tail.beginPath(); this.tail.moveTo(a.x, a.y); this.tail.lineTo(b.x, b.y); this.tail.strokePath();
+    if (ratio < 0.025) return;
+
+    // This is a luminous wake, not a rigid tail. It follows the rail and grows dramatically with speed.
+    const trailLength = 28 + ratio * 360;
+    const segments = 22;
+    const points: Phaser.Geom.Point[] = [];
+
+    for (let i = segments; i >= 0; i -= 1) {
+      const t = i / segments;
+      const sample = this.track.sample(this.visualDistance - trailLength * t, this.lane);
+      points.push(new Phaser.Geom.Point(sample.x, sample.y));
     }
+
+    // Wide atmospheric bloom.
+    this.trail.lineStyle(22 + ratio * 20, 0x008cff, 0.08 + ratio * 0.08);
+    this.tracePoints(points);
+
+    // Bright cyan body of the wake.
+    this.trail.lineStyle(10 + ratio * 9, 0x00dfff, 0.18 + ratio * 0.2);
+    this.tracePoints(points);
+
+    // White-hot central filament.
+    this.trail.lineStyle(3 + ratio * 4, 0xb8ffff, 0.48 + ratio * 0.38);
+    this.tracePoints(points);
+
+    // Fade the far end with a short secondary pass so the wake feels emitted, not painted.
+    const rear = points.slice(0, Math.ceil(points.length * 0.48));
+    this.trail.lineStyle(16 + ratio * 10, 0x214dff, 0.07 + ratio * 0.08);
+    this.tracePoints(rear);
+  }
+
+  private tracePoints(points: Phaser.Geom.Point[]): void {
+    if (points.length < 2) return;
+    this.trail.beginPath();
+    this.trail.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) {
+      this.trail.lineTo(points[i].x, points[i].y);
+    }
+    this.trail.strokePath();
   }
 
   private buildPhoton(): void {
     const outerGlow = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
-    outerGlow.fillStyle(0x00d9ff, 0.12);
+    outerGlow.fillStyle(0x00d9ff, 0.13);
     outerGlow.fillEllipse(-5, 0, 78, 38);
-    outerGlow.fillStyle(0x6af7ff, 0.18);
+    outerGlow.fillStyle(0x6af7ff, 0.2);
     outerGlow.fillEllipse(2, 0, 54, 24);
 
     const photon = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
