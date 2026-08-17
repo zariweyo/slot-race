@@ -25,6 +25,15 @@ export class GameScene extends Phaser.Scene {
   private readonly trailSliderY = 64;
   private readonly trailSliderWidth = 240;
 
+  private diagnosticText!: Phaser.GameObjects.Text;
+  private fxButton!: Phaser.GameObjects.Text;
+  private fxEnabled = true;
+  private fpsEma = 60;
+  private frameMsEma = 16.7;
+  private maxFrameMs = 0;
+  private diagnosticElapsed = 0;
+  private maxResetElapsed = 0;
+
   constructor() {
     super('game');
   }
@@ -39,6 +48,7 @@ export class GameScene extends Phaser.Scene {
 
     this.createHud();
     this.createTrailSlider();
+    this.createDiagnostics();
     this.createThrottleButton();
 
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -53,6 +63,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.updateDiagnostics(delta);
+
     const throttle = this.throttlePointer || this.spaceKey?.isDown === true;
     this.car.updateCar(delta, throttle);
 
@@ -86,8 +98,7 @@ export class GameScene extends Phaser.Scene {
         strokeThickness: 7,
       })
       .setOrigin(1, 0)
-      .setDepth(41)
-      .setBlendMode(Phaser.BlendModes.ADD);
+      .setDepth(41);
 
     this.add.text(GAME_WIDTH - 47, 93, 'KM/H', this.hudStyle(13, '#76edff')).setOrigin(1, 0).setDepth(41);
 
@@ -100,8 +111,7 @@ export class GameScene extends Phaser.Scene {
         strokeThickness: 8,
       })
       .setOrigin(0.5)
-      .setDepth(50)
-      .setBlendMode(Phaser.BlendModes.ADD);
+      .setDepth(50);
 
     this.add
       .text(38, GAME_HEIGHT - 37, 'HOLD TO PUSH THE LIMIT', this.hudStyle(13, '#77ddeb'))
@@ -134,24 +144,77 @@ export class GameScene extends Phaser.Scene {
       const clamped = Phaser.Math.Clamp(pointerX, x, x + width);
       this.trailScale = (clamped - x) / width;
       this.trailKnob.x = clamped;
-      const percent = Math.round(this.trailScale * 100);
-      this.trailValueText.setText(`${percent}%`);
+      this.trailValueText.setText(`${Math.round(this.trailScale * 100)}%`);
       this.car.setTrailScale(this.trailScale);
     };
 
-    this.trailKnob.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number) => {
-      updateFromX(dragX);
-    });
-
+    this.trailKnob.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number) => updateFromX(dragX));
     track.setInteractive({ useHandCursor: true });
     track.on('pointerdown', (pointer: Phaser.Input.Pointer) => updateFromX(pointer.x));
+  }
+
+  private createDiagnostics(): void {
+    const x = 885;
+    const y = 138;
+    const panel = this.add.rectangle(x, y, 330, 82, 0x030711, 0.9).setOrigin(0).setDepth(70);
+    panel.setStrokeStyle(1, 0x6befff, 0.5);
+
+    this.diagnosticText = this.add
+      .text(x + 14, y + 10, 'FPS 60.0   FRAME 16.7 ms   MAX 16.7 ms', {
+        fontFamily: 'monospace',
+        fontSize: '13px',
+        color: '#c9fbff',
+      })
+      .setDepth(71);
+
+    this.fxButton = this.add
+      .text(x + 14, y + 43, 'FX: FULL', {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '16px',
+        color: '#66f4ff',
+        backgroundColor: '#10243a',
+        padding: { x: 10, y: 5 },
+      })
+      .setDepth(72)
+      .setInteractive({ useHandCursor: true });
+
+    this.fxButton.on('pointerdown', () => {
+      this.fxEnabled = !this.fxEnabled;
+      this.track.setFxEnabled(this.fxEnabled);
+      this.car.setFxEnabled(this.fxEnabled);
+      this.fxButton.setText(this.fxEnabled ? 'FX: FULL' : 'FX: OFF');
+      this.fxButton.setColor(this.fxEnabled ? '#66f4ff' : '#ffffff');
+    });
+  }
+
+  private updateDiagnostics(delta: number): void {
+    const safeDelta = Math.max(0.1, delta);
+    const instantFps = 1000 / safeDelta;
+    this.fpsEma += (instantFps - this.fpsEma) * 0.08;
+    this.frameMsEma += (safeDelta - this.frameMsEma) * 0.08;
+    this.maxFrameMs = Math.max(this.maxFrameMs, safeDelta);
+    this.diagnosticElapsed += safeDelta;
+    this.maxResetElapsed += safeDelta;
+
+    if (this.diagnosticElapsed >= 250) {
+      this.diagnosticElapsed = 0;
+      this.diagnosticText.setText(
+        `FPS ${this.fpsEma.toFixed(1)}   FRAME ${this.frameMsEma.toFixed(1)} ms   MAX ${this.maxFrameMs.toFixed(1)} ms`,
+      );
+    }
+
+    // MAX is a rolling-ish five-second observation window, easier to compare FULL vs OFF.
+    if (this.maxResetElapsed >= 5000) {
+      this.maxResetElapsed = 0;
+      this.maxFrameMs = safeDelta;
+    }
   }
 
   private createThrottleButton(): void {
     const x = GAME_WIDTH - 155;
     const y = GAME_HEIGHT - 115;
 
-    const aura = this.add.ellipse(0, 0, 238, 126, 0x00dfff, 0.12).setBlendMode(Phaser.BlendModes.ADD);
+    const aura = this.add.ellipse(0, 0, 238, 126, 0x00dfff, 0.12);
     const outer = this.add.ellipse(0, 0, 216, 108, 0x06111f, 0.98);
     outer.setStrokeStyle(6, 0x00dfff, 0.76);
     const inner = this.add.ellipse(0, 0, 194, 88, 0x0b1930, 1);
@@ -190,12 +253,7 @@ export class GameScene extends Phaser.Scene {
 
     const displaySpeed = Math.round(this.car.getSpeed() * 0.78);
     this.speedText.setText(displaySpeed.toString().padStart(3, '0'));
-
-    if (this.car.isCrashed()) {
-      this.statusText.setText('LIMIT BROKEN');
-    } else {
-      this.statusText.setText('');
-    }
+    this.statusText.setText(this.car.isCrashed() ? 'LIMIT BROKEN' : '');
   }
 
   private setThrottleVisual(active: boolean): void {
