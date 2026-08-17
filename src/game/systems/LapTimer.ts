@@ -43,11 +43,7 @@ export class LapTimer {
   }
 
   static format(ms: number | null): string {
-    if (ms === null) return '--:--.---';
-    const totalSeconds = ms / 1000;
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = Math.floor(totalSeconds % 60);
-    const millis = Math.floor(ms % 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`;
+    if (ms === null) return '--.---';
+    return (ms / 1000).toFixed(3);
   }
 }
