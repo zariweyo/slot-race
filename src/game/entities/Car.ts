@@ -16,6 +16,7 @@ export class Car extends Phaser.GameObjects.Container {
   private crashVx = 0;
   private crashVy = 0;
   private crashAngularVelocity = 0;
+  private trailScale = 1;
   private readonly trail: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, private readonly track: OvalTrack, private readonly lane = 0) {
@@ -60,6 +61,11 @@ export class Car extends Phaser.GameObjects.Container {
   getSpeed(): number { return this.speed; }
   isDrifting(): boolean { return false; }
   isCrashed(): boolean { return this.crashed; }
+
+  setTrailScale(value: number): void {
+    this.trailScale = Phaser.Math.Clamp(value, 0, 1);
+    if (this.trailScale <= 0) this.trail.clear();
+  }
 
   private fixedStep(dt: number, throttle: boolean): void {
     this.previousDistance = this.distance;
@@ -147,13 +153,15 @@ export class Car extends Phaser.GameObjects.Container {
 
   private drawTrail(): void {
     this.trail.clear();
-    if (this.crashed) return;
+    if (this.crashed || this.trailScale <= 0) return;
 
     const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
     if (ratio < 0.025) return;
 
-    const trailLength = 28 + ratio * 360;
-    const segments = 22;
+    const trailLength = (28 + ratio * 360) * this.trailScale;
+    if (trailLength < 1) return;
+
+    const segments = Math.max(4, Math.round(22 * this.trailScale));
     const points: Phaser.Geom.Point[] = [];
 
     for (let i = segments; i >= 0; i -= 1) {
