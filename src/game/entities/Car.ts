@@ -8,8 +8,10 @@ export class Car extends Phaser.GameObjects.Container {
   private crashed = false;
   private crashTimerMs = 0;
   private invulnerableMs = 0;
-  private crashSample: TrackSample | null = null;
   private driftAmount = 0;
+  private crashVx = 0;
+  private crashVy = 0;
+  private crashAngularVelocity = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -27,7 +29,7 @@ export class Car extends Phaser.GameObjects.Container {
     const dt = Math.min(deltaMs / 1000, 0.05);
 
     if (this.crashed) {
-      this.updateCrash(deltaMs);
+      this.updateCrash(deltaMs, dt);
       return;
     }
 
@@ -42,7 +44,7 @@ export class Car extends Phaser.GameObjects.Container {
 
     if (this.invulnerableMs > 0) {
       this.invulnerableMs = Math.max(0, this.invulnerableMs - deltaMs);
-      this.alpha = Math.floor(this.invulnerableMs / 105) % 2 === 0 ? 0.28 : 1;
+      this.alpha = Math.floor(this.invulnerableMs / 105) % 2 === 0 ? 0.32 : 1;
     } else {
       this.alpha = 1;
     }
@@ -65,9 +67,10 @@ export class Car extends Phaser.GameObjects.Container {
       return;
     }
 
-    const slide = this.driftAmount * 14;
-    this.setPosition(sample.x + sample.outwardX * slide, sample.y + sample.outwardY * slide);
-    this.setRotation(sample.angle - this.driftAmount * 0.22);
+    const lateralSlip = this.driftAmount * 10;
+    const yaw = this.driftAmount * 0.16;
+    this.setPosition(sample.x + sample.outwardX * lateralSlip, sample.y + sample.outwardY * lateralSlip);
+    this.setRotation(sample.angle + yaw);
   }
 
   getDistance(): number {
@@ -89,28 +92,35 @@ export class Car extends Phaser.GameObjects.Container {
   private beginCrash(sample: TrackSample): void {
     this.crashed = true;
     this.crashTimerMs = 0;
-    this.crashSample = sample;
     this.driftAmount = 1;
+
+    const tangentX = Math.cos(sample.angle);
+    const tangentY = Math.sin(sample.angle);
+    this.crashVx = tangentX * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardX * CAR_PHYSICS.crashOutwardImpulse;
+    this.crashVy = tangentY * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardY * CAR_PHYSICS.crashOutwardImpulse;
+    this.crashAngularVelocity = CAR_PHYSICS.crashSpin;
+
+    this.setPosition(sample.x + sample.outwardX * 10, sample.y + sample.outwardY * 10);
+    this.setRotation(sample.angle + 0.12);
   }
 
-  private updateCrash(deltaMs: number): void {
-    if (!this.crashSample) return;
-
+  private updateCrash(deltaMs: number, dt: number): void {
     this.crashTimerMs += deltaMs;
-    const t = Phaser.Math.Clamp(this.crashTimerMs / CAR_PHYSICS.respawnDelayMs, 0, 1);
-    const eased = Phaser.Math.Easing.Quadratic.Out(t);
-    const sample = this.crashSample;
 
-    this.setPosition(
-      sample.x + sample.outwardX * 125 * eased,
-      sample.y + sample.outwardY * 125 * eased,
-    );
-    this.setRotation(sample.angle + eased * 2.6);
-    this.alpha = 1 - eased * 0.45;
+    const dragFactor = Math.pow(CAR_PHYSICS.crashGroundDrag, dt * 10);
+    this.crashVx *= dragFactor;
+    this.crashVy *= dragFactor;
+
+    this.x += this.crashVx * dt;
+    this.y += this.crashVy * dt;
+    this.rotation += this.crashAngularVelocity * dt;
+    this.crashAngularVelocity *= Math.pow(0.78, dt * 10);
+
+    const t = Phaser.Math.Clamp(this.crashTimerMs / CAR_PHYSICS.respawnDelayMs, 0, 1);
+    this.alpha = 1 - t * 0.22;
 
     if (t >= 1) {
       this.crashed = false;
-      this.crashSample = null;
       this.crashTimerMs = 0;
       this.speed = CAR_PHYSICS.respawnSpeed;
       this.invulnerableMs = CAR_PHYSICS.respawnBlinkMs;
@@ -127,50 +137,50 @@ export class Car extends Phaser.GameObjects.Container {
 
   private buildLeMansPrototype(): void {
     const shadow = this.scene.add.graphics();
-    shadow.fillStyle(0x000000, 0.35);
-    shadow.fillEllipse(2, 4, 63, 30);
+    shadow.fillStyle(0x000000, 0.3);
+    shadow.fillEllipse(4, 5, 66, 28);
 
     const wheels = this.scene.add.graphics();
-    wheels.fillStyle(0x090a0b, 1);
-    wheels.fillRoundedRect(-22, -19, 17, 8, 2);
-    wheels.fillRoundedRect(-22, 11, 17, 8, 2);
-    wheels.fillRoundedRect(10, -18, 16, 7, 2);
-    wheels.fillRoundedRect(10, 11, 16, 7, 2);
+    wheels.fillStyle(0x08090a, 1);
+    wheels.fillRoundedRect(-24, -18, 17, 7, 2);
+    wheels.fillRoundedRect(-24, 11, 17, 7, 2);
+    wheels.fillRoundedRect(11, -17, 15, 6, 2);
+    wheels.fillRoundedRect(11, 11, 15, 6, 2);
 
     const body = this.scene.add.graphics();
-    body.fillStyle(0xeaecef, 1);
+    body.fillStyle(0xf0f2f4, 1);
     body.beginPath();
-    body.moveTo(35, 0);
-    body.lineTo(24, -13);
-    body.lineTo(5, -16);
-    body.lineTo(-8, -14);
-    body.lineTo(-25, -16);
-    body.lineTo(-32, -11);
-    body.lineTo(-32, 11);
-    body.lineTo(-25, 16);
-    body.lineTo(-8, 14);
-    body.lineTo(5, 16);
-    body.lineTo(24, 13);
+    body.moveTo(36, 0);
+    body.lineTo(25, -12);
+    body.lineTo(7, -15);
+    body.lineTo(-8, -13);
+    body.lineTo(-26, -15);
+    body.lineTo(-34, -10);
+    body.lineTo(-34, 10);
+    body.lineTo(-26, 15);
+    body.lineTo(-8, 13);
+    body.lineTo(7, 15);
+    body.lineTo(25, 12);
     body.closePath();
     body.fillPath();
 
-    body.fillStyle(0xd7232a, 1);
-    body.fillTriangle(35, 0, 14, -7, 14, 7);
-    body.fillRect(-29, -3, 43, 6);
+    body.fillStyle(0xd9212b, 1);
+    body.fillTriangle(36, 0, 14, -7, 14, 7);
+    body.fillRoundedRect(-29, -3, 44, 6, 3);
 
-    body.fillStyle(0x1d252c, 1);
-    body.fillRoundedRect(-5, -9, 17, 18, 7);
-    body.fillStyle(0x77a9bd, 0.8);
-    body.fillRoundedRect(1, -7, 8, 14, 4);
+    body.fillStyle(0x141a1f, 1);
+    body.fillRoundedRect(-4, -8, 18, 16, 7);
+    body.fillStyle(0x76a7bd, 0.82);
+    body.fillRoundedRect(2, -6, 9, 12, 4);
 
-    body.fillStyle(0xf3c84b, 1);
-    body.fillCircle(25, -8, 3.2);
-    body.fillCircle(25, 8, 3.2);
+    body.fillStyle(0xf5d45c, 1);
+    body.fillCircle(25, -8, 3);
+    body.fillCircle(25, 8, 3);
 
-    body.fillStyle(0x151719, 1);
-    body.fillRect(-34, -18, 6, 36);
-    body.fillStyle(0xeaecef, 1);
-    body.fillRect(-36, -15, 4, 30);
+    body.fillStyle(0x111315, 1);
+    body.fillRect(-36, -17, 6, 34);
+    body.fillStyle(0xf0f2f4, 1);
+    body.fillRect(-38, -14, 4, 28);
 
     const number = this.scene.add
       .text(-13, 0, '7', {
