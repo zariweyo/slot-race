@@ -2,9 +2,13 @@ import Phaser from 'phaser';
 import { CAR_PHYSICS, TRACK_CONFIG } from '../config';
 import { OvalTrack, type TrackSample } from '../track/OvalTrack';
 
+const FIXED_STEP_MS = 1000 / 120;
+
 export class Car extends Phaser.GameObjects.Container {
   private distance = 110;
-  private visualDistance = 110;
+  private previousDistance = 110;
+  private renderDistance = 110;
+  private accumulatorMs = 0;
   private speed = 0;
   private crashed = false;
   private crashTimerMs = 0;
@@ -24,47 +28,31 @@ export class Car extends Phaser.GameObjects.Container {
   }
 
   updateCar(deltaMs: number, throttle: boolean): void {
-    const dt = Math.min(deltaMs / 1000, 0.04);
+    const clampedDelta = Math.min(deltaMs, 50);
 
     if (this.crashed) {
-      this.updateCrash(deltaMs, dt);
+      this.updateCrash(clampedDelta, clampedDelta / 1000);
       this.drawTrail();
       return;
     }
 
-    this.speed += (throttle ? CAR_PHYSICS.acceleration : -CAR_PHYSICS.coastDrag) * dt;
-    this.speed = Phaser.Math.Clamp(this.speed, 0, CAR_PHYSICS.maxSpeed);
-    this.distance = Phaser.Math.Wrap(this.distance + this.speed * dt, 0, this.track.totalLength);
-
-    if (this.invulnerableMs > 0) {
-      this.invulnerableMs = Math.max(0, this.invulnerableMs - deltaMs);
-      this.alpha = Math.floor(this.invulnerableMs / 105) % 2 === 0 ? 0.32 : 1;
-    } else {
-      this.alpha = 1;
+    this.accumulatorMs += clampedDelta;
+    while (this.accumulatorMs >= FIXED_STEP_MS) {
+      this.fixedStep(FIXED_STEP_MS / 1000, throttle);
+      this.accumulatorMs -= FIXED_STEP_MS;
+      if (this.crashed) break;
     }
 
-    const physicsSample = this.track.sample(this.distance, this.lane);
-    const effectiveRadius = physicsSample.curvature > 0 ? 1 / physicsSample.curvature : TRACK_CONFIG.radius;
-    const curveLimit = CAR_PHYSICS.curveBaseLimit * Math.sqrt(effectiveRadius / TRACK_CONFIG.radius);
-    const speedRatio = physicsSample.inCurve ? this.speed / curveLimit : 0;
-    const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
-
-    if (
-      physicsSample.inCurve &&
-      throttle &&
-      atAbsoluteLimit &&
-      speedRatio > CAR_PHYSICS.offTrackRatio &&
-      this.invulnerableMs <= 0
-    ) {
-      this.beginCrash(physicsSample);
+    if (this.crashed) {
       this.drawTrail();
       return;
     }
 
-    this.updateVisualDistance(deltaMs);
-    const visualSample = this.track.sample(this.visualDistance, this.lane);
-    this.setPosition(visualSample.x, visualSample.y);
-    this.setRotation(visualSample.angle);
+    const alpha = this.accumulatorMs / FIXED_STEP_MS;
+    this.renderDistance = this.interpolateWrappedDistance(this.previousDistance, this.distance, alpha);
+    const sample = this.track.sample(this.renderDistance, this.lane);
+    this.setPosition(sample.x, sample.y);
+    this.setRotation(sample.angle);
     this.drawTrail();
   }
 
@@ -73,26 +61,54 @@ export class Car extends Phaser.GameObjects.Container {
   isDrifting(): boolean { return false; }
   isCrashed(): boolean { return this.crashed; }
 
-  private updateVisualDistance(deltaMs: number): void {
+  private fixedStep(dt: number, throttle: boolean): void {
+    this.previousDistance = this.distance;
+    this.speed += (throttle ? CAR_PHYSICS.acceleration : -CAR_PHYSICS.coastDrag) * dt;
+    this.speed = Phaser.Math.Clamp(this.speed, 0, CAR_PHYSICS.maxSpeed);
+    this.distance = Phaser.Math.Wrap(this.distance + this.speed * dt, 0, this.track.totalLength);
+
+    if (this.invulnerableMs > 0) {
+      this.invulnerableMs = Math.max(0, this.invulnerableMs - FIXED_STEP_MS);
+      this.alpha = Math.floor(this.invulnerableMs / 105) % 2 === 0 ? 0.32 : 1;
+    } else {
+      this.alpha = 1;
+    }
+
+    const sample = this.track.sample(this.distance, this.lane);
+    const effectiveRadius = sample.curvature > 0 ? 1 / sample.curvature : TRACK_CONFIG.radius;
+    const curveLimit = CAR_PHYSICS.curveBaseLimit * Math.sqrt(effectiveRadius / TRACK_CONFIG.radius);
+    const speedRatio = sample.inCurve ? this.speed / curveLimit : 0;
+    const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
+
+    if (
+      sample.inCurve &&
+      throttle &&
+      atAbsoluteLimit &&
+      speedRatio > CAR_PHYSICS.offTrackRatio &&
+      this.invulnerableMs <= 0
+    ) {
+      this.beginCrash(sample);
+    }
+  }
+
+  private interpolateWrappedDistance(from: number, to: number, alpha: number): number {
     const length = this.track.totalLength;
-    let delta = this.distance - this.visualDistance;
+    let delta = to - from;
     if (delta > length / 2) delta -= length;
     if (delta < -length / 2) delta += length;
-
-    // Exponential interpolation: frame-rate independent and still responsive at top speed.
-    const smoothing = 1 - Math.exp(-deltaMs / 28);
-    this.visualDistance = Phaser.Math.Wrap(this.visualDistance + delta * smoothing, 0, length);
+    return Phaser.Math.Wrap(from + delta * alpha, 0, length);
   }
 
   private beginCrash(sample: TrackSample): void {
     this.crashed = true;
     this.crashTimerMs = 0;
+    this.accumulatorMs = 0;
+    this.renderDistance = this.distance;
     const tangentX = Math.cos(sample.angle);
     const tangentY = Math.sin(sample.angle);
     this.crashVx = tangentX * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardX * CAR_PHYSICS.crashOutwardImpulse;
     this.crashVy = tangentY * this.speed * CAR_PHYSICS.crashForwardRetention + sample.outwardY * CAR_PHYSICS.crashOutwardImpulse;
     this.crashAngularVelocity = CAR_PHYSICS.crashSpin;
-    this.visualDistance = this.distance;
     this.setPosition(sample.x, sample.y);
     this.setRotation(sample.angle);
   }
@@ -120,8 +136,10 @@ export class Car extends Phaser.GameObjects.Container {
   }
 
   private placeOnTrack(): void {
-    this.visualDistance = this.distance;
-    const sample = this.track.sample(this.visualDistance, this.lane);
+    this.previousDistance = this.distance;
+    this.renderDistance = this.distance;
+    this.accumulatorMs = 0;
+    const sample = this.track.sample(this.renderDistance, this.lane);
     this.setPosition(sample.x, sample.y);
     this.setRotation(sample.angle);
     this.drawTrail();
@@ -134,30 +152,23 @@ export class Car extends Phaser.GameObjects.Container {
     const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
     if (ratio < 0.025) return;
 
-    // This is a luminous wake, not a rigid tail. It follows the rail and grows dramatically with speed.
     const trailLength = 28 + ratio * 360;
     const segments = 22;
     const points: Phaser.Geom.Point[] = [];
 
     for (let i = segments; i >= 0; i -= 1) {
       const t = i / segments;
-      const sample = this.track.sample(this.visualDistance - trailLength * t, this.lane);
+      const sample = this.track.sample(this.renderDistance - trailLength * t, this.lane);
       points.push(new Phaser.Geom.Point(sample.x, sample.y));
     }
 
-    // Wide atmospheric bloom.
     this.trail.lineStyle(22 + ratio * 20, 0x008cff, 0.08 + ratio * 0.08);
     this.tracePoints(points);
-
-    // Bright cyan body of the wake.
     this.trail.lineStyle(10 + ratio * 9, 0x00dfff, 0.18 + ratio * 0.2);
     this.tracePoints(points);
-
-    // White-hot central filament.
     this.trail.lineStyle(3 + ratio * 4, 0xb8ffff, 0.48 + ratio * 0.38);
     this.tracePoints(points);
 
-    // Fade the far end with a short secondary pass so the wake feels emitted, not painted.
     const rear = points.slice(0, Math.ceil(points.length * 0.48));
     this.trail.lineStyle(16 + ratio * 10, 0x214dff, 0.07 + ratio * 0.08);
     this.tracePoints(rear);
@@ -167,9 +178,7 @@ export class Car extends Phaser.GameObjects.Container {
     if (points.length < 2) return;
     this.trail.beginPath();
     this.trail.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i += 1) {
-      this.trail.lineTo(points[i].x, points[i].y);
-    }
+    for (let i = 1; i < points.length; i += 1) this.trail.lineTo(points[i].x, points[i].y);
     this.trail.strokePath();
   }
 
