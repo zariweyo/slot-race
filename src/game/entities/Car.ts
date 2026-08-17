@@ -17,7 +17,9 @@ export class Car extends Phaser.GameObjects.Container {
   private crashVy = 0;
   private crashAngularVelocity = 0;
   private trailScale = 1;
+  private fxEnabled = true;
   private readonly trail: Phaser.GameObjects.Graphics;
+  private photonGlow!: Phaser.GameObjects.Graphics;
 
   constructor(scene: Phaser.Scene, private readonly track: OvalTrack, private readonly lane = 0) {
     super(scene, 0, 0);
@@ -67,6 +69,13 @@ export class Car extends Phaser.GameObjects.Container {
     if (this.trailScale <= 0) this.trail.clear();
   }
 
+  setFxEnabled(enabled: boolean): void {
+    this.fxEnabled = enabled;
+    this.photonGlow.setVisible(enabled);
+    this.trail.setVisible(enabled);
+    if (!enabled) this.trail.clear();
+  }
+
   private fixedStep(dt: number, throttle: boolean): void {
     this.previousDistance = this.distance;
     this.speed += (throttle ? CAR_PHYSICS.acceleration : -CAR_PHYSICS.coastDrag) * dt;
@@ -86,13 +95,7 @@ export class Car extends Phaser.GameObjects.Container {
     const speedRatio = sample.inCurve ? this.speed / curveLimit : 0;
     const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
 
-    if (
-      sample.inCurve &&
-      throttle &&
-      atAbsoluteLimit &&
-      speedRatio > CAR_PHYSICS.offTrackRatio &&
-      this.invulnerableMs <= 0
-    ) {
+    if (sample.inCurve && throttle && atAbsoluteLimit && speedRatio > CAR_PHYSICS.offTrackRatio && this.invulnerableMs <= 0) {
       this.beginCrash(sample);
     }
   }
@@ -153,7 +156,7 @@ export class Car extends Phaser.GameObjects.Container {
 
   private drawTrail(): void {
     this.trail.clear();
-    if (this.crashed || this.trailScale <= 0) return;
+    if (!this.fxEnabled || this.crashed || this.trailScale <= 0) return;
 
     const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
     if (ratio < 0.025) return;
@@ -163,7 +166,6 @@ export class Car extends Phaser.GameObjects.Container {
 
     const segments = Math.max(4, Math.round(22 * this.trailScale));
     const points: Phaser.Geom.Point[] = [];
-
     for (let i = segments; i >= 0; i -= 1) {
       const t = i / segments;
       const sample = this.track.sample(this.renderDistance - trailLength * t, this.lane);
@@ -176,7 +178,6 @@ export class Car extends Phaser.GameObjects.Container {
     this.tracePoints(points);
     this.trail.lineStyle(3 + ratio * 4, 0xb8ffff, 0.48 + ratio * 0.38);
     this.tracePoints(points);
-
     const rear = points.slice(0, Math.ceil(points.length * 0.48));
     this.trail.lineStyle(16 + ratio * 10, 0x214dff, 0.07 + ratio * 0.08);
     this.tracePoints(rear);
@@ -191,13 +192,13 @@ export class Car extends Phaser.GameObjects.Container {
   }
 
   private buildPhoton(): void {
-    const outerGlow = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
-    outerGlow.fillStyle(0x00d9ff, 0.13);
-    outerGlow.fillEllipse(-5, 0, 78, 38);
-    outerGlow.fillStyle(0x6af7ff, 0.2);
-    outerGlow.fillEllipse(2, 0, 54, 24);
+    this.photonGlow = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    this.photonGlow.fillStyle(0x00d9ff, 0.13);
+    this.photonGlow.fillEllipse(-5, 0, 78, 38);
+    this.photonGlow.fillStyle(0x6af7ff, 0.2);
+    this.photonGlow.fillEllipse(2, 0, 54, 24);
 
-    const photon = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    const photon = this.scene.add.graphics();
     const outerShape = [
       new Phaser.Geom.Point(36, 0), new Phaser.Geom.Point(22, -8), new Phaser.Geom.Point(5, -13),
       new Phaser.Geom.Point(-12, -12), new Phaser.Geom.Point(-27, -6), new Phaser.Geom.Point(-34, 0),
@@ -214,6 +215,6 @@ export class Car extends Phaser.GameObjects.Container {
     photon.fillPoints(coreShape, true, true);
     photon.fillStyle(0x1ecfff, 0.82);
     photon.fillCircle(-12, 0, 4.5);
-    this.add([outerGlow, photon]);
+    this.add([this.photonGlow, photon]);
   }
 }
