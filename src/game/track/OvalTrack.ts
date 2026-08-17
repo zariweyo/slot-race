@@ -26,42 +26,43 @@ export class OvalTrack {
   draw(): void {
     const { centerX, centerY, roadWidth } = TRACK_CONFIG;
 
-    this.scene.add.rectangle(centerX, centerY, 1280, 720, 0x111713).setDepth(-30);
+    this.scene.add.rectangle(centerX, centerY, 1280, 720, 0x03050c).setDepth(-40);
 
-    const ground = this.scene.add.graphics().setDepth(-29);
-    ground.fillStyle(0x274b31, 1);
-    ground.fillRect(0, 0, 1280, 720);
-    ground.fillStyle(0x31593a, 0.9);
-    ground.fillEllipse(centerX, centerY, 1110, 610);
-    ground.fillStyle(0x23452d, 1);
-    ground.fillEllipse(centerX, centerY, 720, 330);
+    const ambience = this.scene.add.graphics().setDepth(-39).setBlendMode(Phaser.BlendModes.ADD);
+    ambience.fillStyle(0x112a4f, 0.16);
+    ambience.fillEllipse(centerX, centerY, 1180, 660);
+    ambience.fillStyle(0x3a0f57, 0.14);
+    ambience.fillEllipse(centerX, centerY + 20, 900, 500);
+    ambience.fillStyle(0x091329, 0.95);
+    ambience.fillEllipse(centerX, centerY, 720, 320);
 
-    const service = this.scene.add.graphics().setDepth(-18);
-    this.strokeTrack(service, 0, roadWidth + 52, 0x6b7073, 0.42);
-    this.strokeTrack(service, 0, roadWidth + 34, 0xb8b9b7, 0.22);
+    this.drawGrid();
 
-    const outerShadow = this.scene.add.graphics().setDepth(-17);
-    this.strokeTrack(outerShadow, 0, roadWidth + 14, 0x000000, 0.38);
+    const outerGlow = this.scene.add.graphics().setDepth(-24).setBlendMode(Phaser.BlendModes.ADD);
+    this.strokeTrack(outerGlow, 0, roadWidth + 58, 0x5b1cff, 0.07);
+    this.strokeTrack(outerGlow, 0, roadWidth + 36, 0x00cfff, 0.1);
 
-    const road = this.scene.add.graphics().setDepth(-16);
-    this.strokeTrack(road, 0, roadWidth, 0x3a3d40, 1);
-    this.strokeTrack(road, 0, roadWidth - 6, 0x2d3033, 1);
-    this.strokeTrack(road, 0, roadWidth - 18, 0x292c2f, 1);
+    const border = this.scene.add.graphics().setDepth(-23);
+    this.strokeTrack(border, 0, roadWidth + 20, 0x0a1020, 1);
+    this.strokeTrack(border, 0, roadWidth + 12, 0x17243e, 1);
 
-    const asphaltDetail = this.scene.add.graphics().setDepth(-15);
-    asphaltDetail.lineStyle(1.5, 0x555b60, 0.14);
-    this.traceTrack(asphaltDetail, -roadWidth * 0.26);
-    asphaltDetail.strokePath();
-    this.traceTrack(asphaltDetail, roadWidth * 0.26);
-    asphaltDetail.strokePath();
+    const edgeGlow = this.scene.add.graphics().setDepth(-22).setBlendMode(Phaser.BlendModes.ADD);
+    this.strokeTrack(edgeGlow, 0, roadWidth + 10, 0x00eaff, 0.28);
+    this.strokeTrack(edgeGlow, 0, roadWidth + 3, 0xff32e6, 0.16);
 
-    this.drawKerbs(-roadWidth / 2 + 1);
-    this.drawKerbs(roadWidth / 2 - 1);
-    this.drawRunoffMarkers();
+    const road = this.scene.add.graphics().setDepth(-20);
+    this.strokeTrack(road, 0, roadWidth, 0x111827, 1);
+    this.strokeTrack(road, 0, roadWidth - 10, 0x0a1020, 1);
+    this.strokeTrack(road, 0, roadWidth - 25, 0x0c1425, 1);
+
+    const innerSheen = this.scene.add.graphics().setDepth(-19).setBlendMode(Phaser.BlendModes.ADD);
+    this.strokeTrack(innerSheen, 0, roadWidth - 34, 0x184d7a, 0.06);
+
     this.drawSlotRails();
-    this.drawRubberMarks();
+    this.drawLaneGuides();
+    this.drawDirectionArrows();
+    this.drawEnergyPosts();
     this.drawStartFinish();
-    this.drawBarriers();
     this.drawScenery();
   }
 
@@ -111,7 +112,13 @@ export class OvalTrack {
     };
   }
 
-  private strokeTrack(graphics: Phaser.GameObjects.Graphics, offset: number, width: number, color: number, alpha: number): void {
+  private strokeTrack(
+    graphics: Phaser.GameObjects.Graphics,
+    offset: number,
+    width: number,
+    color: number,
+    alpha: number,
+  ): void {
     graphics.lineStyle(width, color, alpha);
     this.traceTrack(graphics, offset);
     graphics.strokePath();
@@ -130,114 +137,148 @@ export class OvalTrack {
     graphics.closePath();
   }
 
+  private drawGrid(): void {
+    const grid = this.scene.add.graphics().setDepth(-35);
+    grid.lineStyle(1, 0x1b2c50, 0.18);
+    for (let x = 0; x <= 1280; x += 48) {
+      grid.lineBetween(x, 0, x, 720);
+    }
+    for (let y = 0; y <= 720; y += 48) {
+      grid.lineBetween(0, y, 1280, y);
+    }
+  }
+
   private drawSlotRails(): void {
-    const rails = this.scene.add.graphics().setDepth(-10);
-    rails.lineStyle(5, 0x111315, 0.95);
+    const underglow = this.scene.add.graphics().setDepth(-15).setBlendMode(Phaser.BlendModes.ADD);
+    underglow.lineStyle(8, 0x00eaff, 0.12);
+    this.traceTrack(underglow, -TRACK_CONFIG.laneSpacing / 2);
+    underglow.strokePath();
+    underglow.lineStyle(8, 0xff2ee8, 0.09);
+    this.traceTrack(underglow, TRACK_CONFIG.laneSpacing / 2);
+    underglow.strokePath();
+
+    const rails = this.scene.add.graphics().setDepth(-13);
+    rails.lineStyle(4.5, 0x02050a, 1);
     this.traceTrack(rails, -TRACK_CONFIG.laneSpacing / 2);
     rails.strokePath();
     this.traceTrack(rails, TRACK_CONFIG.laneSpacing / 2);
     rails.strokePath();
 
-    const metal = this.scene.add.graphics().setDepth(-9);
-    metal.lineStyle(1.2, 0x9aa0a5, 0.72);
-    this.traceTrack(metal, -TRACK_CONFIG.laneSpacing / 2 - 2.1);
+    const metal = this.scene.add.graphics().setDepth(-12).setBlendMode(Phaser.BlendModes.ADD);
+    metal.lineStyle(1.1, 0x8df8ff, 0.82);
+    this.traceTrack(metal, -TRACK_CONFIG.laneSpacing / 2 - 2.2);
     metal.strokePath();
-    this.traceTrack(metal, -TRACK_CONFIG.laneSpacing / 2 + 2.1);
+    this.traceTrack(metal, -TRACK_CONFIG.laneSpacing / 2 + 2.2);
     metal.strokePath();
-    this.traceTrack(metal, TRACK_CONFIG.laneSpacing / 2 - 2.1);
+    metal.lineStyle(1.1, 0xff73f1, 0.68);
+    this.traceTrack(metal, TRACK_CONFIG.laneSpacing / 2 - 2.2);
     metal.strokePath();
-    this.traceTrack(metal, TRACK_CONFIG.laneSpacing / 2 + 2.1);
+    this.traceTrack(metal, TRACK_CONFIG.laneSpacing / 2 + 2.2);
     metal.strokePath();
   }
 
-  private drawKerbs(offset: number): void {
-    const step = 20;
-    for (let d = 0, i = 0; d < this.totalLength; d += step, i += 1) {
-      const sample = this.sampleAtOffset(d, offset);
-      this.scene.add
-        .rectangle(sample.x, sample.y, 13, 5.5, i % 2 === 0 ? 0xf4f5f5 : 0xd72832)
-        .setRotation(sample.angle)
-        .setDepth(-8)
-        .setAlpha(0.98);
+  private drawLaneGuides(): void {
+    const guide = this.scene.add.graphics().setDepth(-14).setBlendMode(Phaser.BlendModes.ADD);
+    guide.lineStyle(1.4, 0x55e8ff, 0.18);
+    this.traceTrack(guide, -TRACK_CONFIG.laneSpacing / 2 - 12);
+    guide.strokePath();
+    guide.lineStyle(1.4, 0xff4fe7, 0.14);
+    this.traceTrack(guide, TRACK_CONFIG.laneSpacing / 2 + 12);
+    guide.strokePath();
+  }
+
+  private drawDirectionArrows(): void {
+    const startRight = this.straightLength + 44;
+    const startLeft = this.straightLength * 2 + this.arcLength + 44;
+    const arrowStep = 88;
+
+    for (let i = 0; i < 6; i += 1) {
+      this.addArrow(startRight + i * arrowStep, i % 2 === 0 ? 0x00eaff : 0x78f6ff);
+      this.addArrow(startLeft + i * arrowStep, i % 2 === 0 ? 0xff3de8 : 0xff8cf4);
     }
   }
 
-  private drawRunoffMarkers(): void {
-    const markers = this.scene.add.graphics().setDepth(-12);
-    markers.lineStyle(2, 0xe7e8e8, 0.42);
-    this.traceTrack(markers, -TRACK_CONFIG.roadWidth / 2 - 17);
-    markers.strokePath();
-    this.traceTrack(markers, TRACK_CONFIG.roadWidth / 2 + 17);
-    markers.strokePath();
+  private addArrow(distance: number, color: number): void {
+    const sample = this.sampleAtOffset(distance, 0);
+    const glow = this.scene.add
+      .text(sample.x, sample.y, '>>>', {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '22px',
+        color: `#${color.toString(16).padStart(6, '0')}`,
+        letterSpacing: 1,
+      })
+      .setOrigin(0.5)
+      .setRotation(sample.angle)
+      .setAlpha(0.28)
+      .setDepth(-11)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    glow.setScale(1.45, 1.8);
+
+    this.scene.add
+      .text(sample.x, sample.y, '>>>', {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '18px',
+        color: `#${color.toString(16).padStart(6, '0')}`,
+        letterSpacing: 1,
+      })
+      .setOrigin(0.5)
+      .setRotation(sample.angle)
+      .setAlpha(0.9)
+      .setDepth(-10);
   }
 
-  private drawRubberMarks(): void {
-    const rubber = this.scene.add.graphics().setDepth(-11);
-    rubber.lineStyle(7, 0x101214, 0.13);
-    this.traceTrack(rubber, -TRACK_CONFIG.laneSpacing / 2 + 5);
-    rubber.strokePath();
-    rubber.lineStyle(5, 0x0b0c0d, 0.1);
-    this.traceTrack(rubber, TRACK_CONFIG.laneSpacing / 2 - 5);
-    rubber.strokePath();
+  private drawEnergyPosts(): void {
+    for (let d = 80; d < this.totalLength; d += 120) {
+      const outer = this.sampleAtOffset(d, TRACK_CONFIG.roadWidth / 2 + 18);
+      const inner = this.sampleAtOffset(d, -TRACK_CONFIG.roadWidth / 2 - 18);
+      this.addPost(outer.x, outer.y, outer.angle, 0x00dfff);
+      this.addPost(inner.x, inner.y, inner.angle, 0xff35df);
+    }
   }
 
-  private drawBarriers(): void {
-    const barrier = this.scene.add.graphics().setDepth(-14);
-    barrier.lineStyle(7, 0xd8dbdc, 0.72);
-    this.traceTrack(barrier, -TRACK_CONFIG.roadWidth / 2 - 36);
-    barrier.strokePath();
-    this.traceTrack(barrier, TRACK_CONFIG.roadWidth / 2 + 36);
-    barrier.strokePath();
+  private addPost(x: number, y: number, angle: number, color: number): void {
+    const glow = this.scene.add.graphics().setDepth(-17).setBlendMode(Phaser.BlendModes.ADD);
+    glow.fillStyle(color, 0.16);
+    glow.fillCircle(x, y, 11);
+    glow.fillStyle(color, 0.7);
+    glow.fillCircle(x, y, 2.8);
 
-    const barrierShadow = this.scene.add.graphics().setDepth(-15);
-    barrierShadow.lineStyle(11, 0x080a0b, 0.26);
-    this.traceTrack(barrierShadow, -TRACK_CONFIG.roadWidth / 2 - 39);
-    barrierShadow.strokePath();
-    this.traceTrack(barrierShadow, TRACK_CONFIG.roadWidth / 2 + 39);
-    barrierShadow.strokePath();
+    const tick = this.scene.add.rectangle(x, y, 11, 2, color, 0.8).setRotation(angle).setDepth(-16);
+    tick.setBlendMode(Phaser.BlendModes.ADD);
   }
 
   private drawStartFinish(): void {
     const center = this.sampleAtOffset(70, 0);
-    const cell = 7;
-    const rows = 18;
-    const cols = 2;
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < cols; col += 1) {
-        this.scene.add
-          .rectangle(center.x + (col - 0.5) * cell, center.y + (row - (rows - 1) / 2) * cell, cell, cell, (row + col) % 2 === 0 ? 0xf2f2f2 : 0x111111)
-          .setDepth(-5);
-      }
-    }
+    const beam = this.scene.add.graphics().setDepth(-8).setBlendMode(Phaser.BlendModes.ADD);
+    beam.lineStyle(10, 0x00eaff, 0.08);
+    beam.lineBetween(center.x, center.y - 67, center.x, center.y + 67);
+    beam.lineStyle(2, 0xffffff, 0.95);
+    beam.lineBetween(center.x, center.y - 67, center.x, center.y + 67);
   }
 
   private drawScenery(): void {
     this.scene.add
-      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY - 12, 'SLOT RACE', {
+      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY - 15, 'NEON CIRCUIT', {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '42px',
-        color: '#eef0ef',
-        stroke: '#17311f',
-        strokeThickness: 7,
+        fontSize: '36px',
+        color: '#dffcff',
+        stroke: '#123a61',
+        strokeThickness: 4,
       })
       .setOrigin(0.5)
-      .setAlpha(0.82)
-      .setDepth(-20);
+      .setAlpha(0.72)
+      .setDepth(-30)
+      .setBlendMode(Phaser.BlendModes.ADD);
 
     this.scene.add
-      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY + 40, 'TEST CIRCUIT 01', {
+      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY + 32, 'VELOCITY TEST  //  01', {
         fontFamily: 'Arial, sans-serif',
-        fontSize: '13px',
-        color: '#b9c3ba',
+        fontSize: '12px',
+        color: '#7ceeff',
         letterSpacing: 4,
       })
       .setOrigin(0.5)
-      .setDepth(-20);
-
-    const pit = this.scene.add.graphics().setDepth(-21);
-    pit.fillStyle(0x1b2320, 0.82);
-    pit.fillRoundedRect(TRACK_CONFIG.centerX - 125, TRACK_CONFIG.centerY + 88, 250, 54, 10);
-    pit.lineStyle(2, 0x5b6761, 0.7);
-    pit.strokeRoundedRect(TRACK_CONFIG.centerX - 125, TRACK_CONFIG.centerY + 88, 250, 54, 10);
+      .setAlpha(0.6)
+      .setDepth(-30);
   }
 }
