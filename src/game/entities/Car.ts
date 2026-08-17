@@ -2,21 +2,16 @@ import Phaser from 'phaser';
 import { CAR_PHYSICS, TRACK_CONFIG } from '../config';
 import { OvalTrack, type TrackSample } from '../track/OvalTrack';
 
-type TrailPoint = { x: number; y: number };
-
 export class Car extends Phaser.GameObjects.Container {
   private distance = 110;
   private speed = 0;
   private crashed = false;
   private crashTimerMs = 0;
   private invulnerableMs = 0;
-  private driftAmount = 0;
   private crashVx = 0;
   private crashVy = 0;
   private crashAngularVelocity = 0;
-  private readonly trail: Phaser.GameObjects.Graphics;
-  private readonly trailPoints: TrailPoint[] = [];
-  private readonly bodyGlow: Phaser.GameObjects.Graphics;
+  private readonly tail: Phaser.GameObjects.Graphics;
 
   constructor(
     scene: Phaser.Scene,
@@ -27,9 +22,8 @@ export class Car extends Phaser.GameObjects.Container {
     scene.add.existing(this);
     this.setDepth(20);
 
-    this.trail = scene.add.graphics().setDepth(14).setBlendMode(Phaser.BlendModes.ADD);
-    this.bodyGlow = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
-    this.buildLeMansPrototype();
+    this.tail = scene.add.graphics().setDepth(14).setBlendMode(Phaser.BlendModes.ADD);
+    this.buildPhoton();
     this.placeOnTrack();
   }
 
@@ -38,7 +32,7 @@ export class Car extends Phaser.GameObjects.Container {
 
     if (this.crashed) {
       this.updateCrash(deltaMs, dt);
-      this.updateTrail();
+      this.drawTail();
       return;
     }
 
@@ -62,16 +56,8 @@ export class Car extends Phaser.GameObjects.Container {
     const effectiveRadius = sample.curvature > 0 ? 1 / sample.curvature : TRACK_CONFIG.radius;
     const curveLimit = CAR_PHYSICS.curveBaseLimit * Math.sqrt(effectiveRadius / TRACK_CONFIG.radius);
     const speedRatio = sample.inCurve ? this.speed / curveLimit : 0;
-
-    this.driftAmount = sample.inCurve
-      ? Phaser.Math.Clamp(
-          (speedRatio - CAR_PHYSICS.driftStartRatio) / (CAR_PHYSICS.offTrackRatio - CAR_PHYSICS.driftStartRatio),
-          0,
-          1,
-        )
-      : 0;
-
     const atAbsoluteLimit = this.speed >= CAR_PHYSICS.maxSpeed * CAR_PHYSICS.crashMinSpeedRatio;
+
     if (
       sample.inCurve &&
       throttle &&
@@ -80,17 +66,14 @@ export class Car extends Phaser.GameObjects.Container {
       this.invulnerableMs <= 0
     ) {
       this.beginCrash(sample);
-      this.updateTrail();
+      this.drawTail();
       return;
     }
 
-    const lateralSlip = this.driftAmount * 25;
-    const yaw = this.driftAmount * 0.48;
-    this.setPosition(sample.x + sample.outwardX * lateralSlip, sample.y + sample.outwardY * lateralSlip);
-    this.setRotation(sample.angle + yaw);
-
-    this.updateGlow();
-    this.updateTrail();
+    // The photon is locked to the rail: no lateral slip or drift.
+    this.setPosition(sample.x, sample.y);
+    this.setRotation(sample.angle);
+    this.drawTail();
   }
 
   getDistance(): number {
@@ -102,7 +85,7 @@ export class Car extends Phaser.GameObjects.Container {
   }
 
   isDrifting(): boolean {
-    return this.driftAmount > 0.08 && !this.crashed;
+    return false;
   }
 
   isCrashed(): boolean {
@@ -112,7 +95,6 @@ export class Car extends Phaser.GameObjects.Container {
   private beginCrash(sample: TrackSample): void {
     this.crashed = true;
     this.crashTimerMs = 0;
-    this.driftAmount = 1;
 
     const tangentX = Math.cos(sample.angle);
     const tangentY = Math.sin(sample.angle);
@@ -124,8 +106,8 @@ export class Car extends Phaser.GameObjects.Container {
       sample.outwardY * CAR_PHYSICS.crashOutwardImpulse;
     this.crashAngularVelocity = CAR_PHYSICS.crashSpin;
 
-    this.setPosition(sample.x + sample.outwardX * 12, sample.y + sample.outwardY * 12);
-    this.setRotation(sample.angle + 0.2);
+    this.setPosition(sample.x, sample.y);
+    this.setRotation(sample.angle);
   }
 
   private updateCrash(deltaMs: number, dt: number): void {
@@ -134,15 +116,13 @@ export class Car extends Phaser.GameObjects.Container {
     const dragFactor = Math.pow(CAR_PHYSICS.crashGroundDrag, dt * 10);
     this.crashVx *= dragFactor;
     this.crashVy *= dragFactor;
-
     this.x += this.crashVx * dt;
     this.y += this.crashVy * dt;
     this.rotation += this.crashAngularVelocity * dt;
-    this.crashAngularVelocity *= Math.pow(0.8, dt * 10);
+    this.crashAngularVelocity *= Math.pow(0.82, dt * 10);
 
     const t = Phaser.Math.Clamp(this.crashTimerMs / CAR_PHYSICS.respawnDelayMs, 0, 1);
-    this.alpha = 1 - t * 0.25;
-    this.updateGlow();
+    this.alpha = 1 - t * 0.24;
 
     if (t >= 1) {
       this.crashed = false;
@@ -158,107 +138,71 @@ export class Car extends Phaser.GameObjects.Container {
     const sample = this.track.sample(this.distance, this.lane);
     this.setPosition(sample.x, sample.y);
     this.setRotation(sample.angle);
-    this.trailPoints.length = 0;
-    this.updateGlow();
+    this.drawTail();
   }
 
-  private updateGlow(): void {
+  private drawTail(): void {
+    this.tail.clear();
+    if (this.crashed) return;
+
     const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
-    this.bodyGlow.clear();
-    if (ratio < 0.04) return;
+    if (ratio < 0.03) return;
 
-    this.bodyGlow.fillStyle(0x00eaff, 0.06 + ratio * 0.12);
-    this.bodyGlow.fillEllipse(-8, 0, 95 + ratio * 45, 48 + ratio * 16);
-    this.bodyGlow.fillStyle(0x9b4dff, 0.035 + ratio * 0.08);
-    this.bodyGlow.fillEllipse(-18, 0, 130 + ratio * 70, 62 + ratio * 20);
-  }
+    const tailLength = 14 + ratio * 210;
+    const segments = Math.round(8 + ratio * 28);
 
-  private updateTrail(): void {
-    const ratio = Phaser.Math.Clamp(this.speed / CAR_PHYSICS.maxSpeed, 0, 1);
-    const desiredPoints = Math.round(2 + ratio * 34);
+    for (let i = segments; i > 0; i -= 1) {
+      const t0 = i / segments;
+      const t1 = (i - 1) / segments;
+      const d0 = this.distance - tailLength * t0;
+      const d1 = this.distance - tailLength * t1;
+      const a = this.track.sample(d0, this.lane);
+      const b = this.track.sample(d1, this.lane);
+      const progress = 1 - t0;
+      const alpha = 0.035 + progress * progress * (0.18 + ratio * 0.5);
+      const width = 1.5 + progress * (2.5 + ratio * 8);
 
-    this.trailPoints.push({ x: this.x, y: this.y });
-    while (this.trailPoints.length > desiredPoints) this.trailPoints.shift();
+      this.tail.lineStyle(width * 3.2, 0x00bfff, alpha * 0.14);
+      this.tail.beginPath();
+      this.tail.moveTo(a.x, a.y);
+      this.tail.lineTo(b.x, b.y);
+      this.tail.strokePath();
 
-    this.trail.clear();
-    if (this.trailPoints.length < 2 || ratio < 0.05) return;
-
-    for (let i = 1; i < this.trailPoints.length; i += 1) {
-      const a = this.trailPoints[i - 1];
-      const b = this.trailPoints[i];
-      const progress = i / (this.trailPoints.length - 1);
-      const alpha = progress * progress * (0.06 + ratio * 0.34);
-      const width = 2 + progress * (3 + ratio * 10);
-
-      this.trail.lineStyle(width * 2.8, 0x7b2cff, alpha * 0.2);
-      this.trail.beginPath();
-      this.trail.moveTo(a.x, a.y);
-      this.trail.lineTo(b.x, b.y);
-      this.trail.strokePath();
-
-      this.trail.lineStyle(width, 0x00eaff, alpha);
-      this.trail.beginPath();
-      this.trail.moveTo(a.x, a.y);
-      this.trail.lineTo(b.x, b.y);
-      this.trail.strokePath();
+      this.tail.lineStyle(width, 0x54f7ff, alpha);
+      this.tail.beginPath();
+      this.tail.moveTo(a.x, a.y);
+      this.tail.lineTo(b.x, b.y);
+      this.tail.strokePath();
     }
   }
 
-  private buildLeMansPrototype(): void {
-    const shadow = this.scene.add.graphics();
-    shadow.fillStyle(0x000000, 0.35);
-    shadow.fillEllipse(4, 5, 66, 28);
+  private buildPhoton(): void {
+    const outerGlow = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    outerGlow.fillStyle(0x00d9ff, 0.12);
+    outerGlow.fillEllipse(-5, 0, 78, 38);
+    outerGlow.fillStyle(0x6af7ff, 0.18);
+    outerGlow.fillEllipse(2, 0, 54, 24);
 
-    const wheels = this.scene.add.graphics();
-    wheels.fillStyle(0x05070a, 1);
-    wheels.fillRoundedRect(-24, -18, 17, 7, 2);
-    wheels.fillRoundedRect(-24, 11, 17, 7, 2);
-    wheels.fillRoundedRect(11, -17, 15, 6, 2);
-    wheels.fillRoundedRect(11, 11, 15, 6, 2);
+    const photon = this.scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
+    photon.fillStyle(0x8ffbff, 0.96);
+    photon.beginPath();
+    photon.moveTo(34, 0);
+    photon.bezierCurveTo(12, -14, -15, -13, -29, 0);
+    photon.bezierCurveTo(-15, 13, 12, 14, 34, 0);
+    photon.closePath();
+    photon.fillPath();
 
-    const body = this.scene.add.graphics();
-    body.fillStyle(0xeafcff, 1);
-    body.beginPath();
-    body.moveTo(36, 0);
-    body.lineTo(25, -12);
-    body.lineTo(7, -15);
-    body.lineTo(-8, -13);
-    body.lineTo(-26, -15);
-    body.lineTo(-34, -10);
-    body.lineTo(-34, 10);
-    body.lineTo(-26, 15);
-    body.lineTo(-8, 13);
-    body.lineTo(7, 15);
-    body.lineTo(25, 12);
-    body.closePath();
-    body.fillPath();
+    photon.fillStyle(0xffffff, 0.98);
+    photon.beginPath();
+    photon.moveTo(30, 0);
+    photon.bezierCurveTo(10, -6, -8, -5, -20, 0);
+    photon.bezierCurveTo(-8, 5, 10, 6, 30, 0);
+    photon.closePath();
+    photon.fillPath();
 
-    body.fillStyle(0x00d9ff, 1);
-    body.fillTriangle(36, 0, 13, -7, 13, 7);
-    body.fillRoundedRect(-30, -2.6, 43, 5.2, 2);
+    photon.fillStyle(0x1ecfff, 0.82);
+    photon.fillCircle(-12, 0, 4.5);
 
-    body.fillStyle(0x111827, 1);
-    body.fillRoundedRect(-4, -8, 18, 16, 7);
-    body.fillStyle(0x8cf7ff, 0.84);
-    body.fillRoundedRect(2, -6, 9, 12, 4);
-
-    body.fillStyle(0xff3df2, 1);
-    body.fillCircle(25, -8, 3);
-    body.fillCircle(25, 8, 3);
-
-    body.fillStyle(0x0c1118, 1);
-    body.fillRect(-36, -17, 6, 34);
-    body.fillStyle(0x00eaff, 1);
-    body.fillRect(-38, -14, 4, 28);
-
-    const number = this.scene.add
-      .text(-13, 0, '7', {
-        fontFamily: 'Arial Black, sans-serif',
-        fontSize: '12px',
-        color: '#08101a',
-      })
-      .setOrigin(0.5);
-
-    this.add([this.bodyGlow, shadow, wheels, body, number]);
+    this.add([outerGlow, photon]);
   }
 }
