@@ -58,13 +58,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    const panel = this.add.rectangle(28, 25, 408, 104, 0x0b0e12, 0.82).setOrigin(0).setDepth(40);
-    panel.setStrokeStyle(1, 0x5b626c, 0.7);
+    const panel = this.add.rectangle(28, 25, 405, 104, 0x090c0f, 0.84).setOrigin(0).setDepth(40);
+    panel.setStrokeStyle(1, 0x697078, 0.55);
 
-    this.lapText = this.add.text(48, 40, 'LAP 1', this.hudStyle(23, '#ffffff')).setDepth(41);
-    this.currentText = this.add.text(48, 75, 'CURRENT 0:00.000', this.hudStyle(17, '#d9dde3')).setDepth(41);
-    this.lastText = this.add.text(220, 42, 'LAST --:--.---', this.hudStyle(14, '#aeb5bf')).setDepth(41);
-    this.bestText = this.add.text(220, 72, 'BEST --:--.---', this.hudStyle(14, '#f3c84b')).setDepth(41);
+    this.lapText = this.add.text(48, 40, 'LAP 1', this.hudStyle(22, '#ffffff')).setDepth(41);
+    this.currentText = this.add.text(48, 75, 'CURRENT 0.000', this.hudStyle(18, '#eef1f4')).setDepth(41);
+    this.lastText = this.add.text(222, 42, 'LAST --.---', this.hudStyle(14, '#aeb5bf')).setDepth(41);
+    this.bestText = this.add.text(222, 72, 'BEST --.---', this.hudStyle(14, '#f3c84b')).setDepth(41);
 
     this.speedText = this.add
       .text(GAME_WIDTH - 44, 38, '000', {
@@ -77,15 +77,12 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setDepth(41);
 
-    this.add
-      .text(GAME_WIDTH - 47, 91, 'KM/H', this.hudStyle(13, '#b8bec7'))
-      .setOrigin(1, 0)
-      .setDepth(41);
+    this.add.text(GAME_WIDTH - 47, 91, 'KM/H', this.hudStyle(13, '#b8bec7')).setOrigin(1, 0).setDepth(41);
 
     this.statusText = this.add
-      .text(GAME_WIDTH / 2, 68, '', {
+      .text(GAME_WIDTH / 2, 67, '', {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '29px',
+        fontSize: '27px',
         color: '#ffdb55',
         stroke: '#101216',
         strokeThickness: 7,
@@ -141,7 +138,7 @@ export class GameScene extends Phaser.Scene {
     this.speedText.setText(displaySpeed.toString().padStart(3, '0'));
 
     if (this.car.isCrashed()) {
-      this.statusText.setText('OFF TRACK!');
+      this.statusText.setText('OFF TRACK');
     } else if (this.car.isDrifting()) {
       this.statusText.setText('DRIFT');
     } else {
