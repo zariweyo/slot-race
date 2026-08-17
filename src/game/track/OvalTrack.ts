@@ -140,12 +140,8 @@ export class OvalTrack {
   private drawGrid(): void {
     const grid = this.scene.add.graphics().setDepth(-35);
     grid.lineStyle(1, 0x1b2c50, 0.18);
-    for (let x = 0; x <= 1280; x += 48) {
-      grid.lineBetween(x, 0, x, 720);
-    }
-    for (let y = 0; y <= 720; y += 48) {
-      grid.lineBetween(0, y, 1280, y);
-    }
+    for (let x = 0; x <= 1280; x += 48) grid.lineBetween(x, 0, x, 720);
+    for (let y = 0; y <= 720; y += 48) grid.lineBetween(0, y, 1280, y);
   }
 
   private drawSlotRails(): void {
@@ -188,43 +184,58 @@ export class OvalTrack {
   }
 
   private drawDirectionArrows(): void {
-    const startRight = this.straightLength + 44;
-    const startLeft = this.straightLength * 2 + this.arcLength + 44;
-    const arrowStep = 88;
+    const rightStart = this.straightLength + 54;
+    const leftStart = this.straightLength * 2 + this.arcLength + 54;
+    const step = (this.arcLength - 108) / 7;
 
-    for (let i = 0; i < 6; i += 1) {
-      this.addArrow(startRight + i * arrowStep, i % 2 === 0 ? 0x00eaff : 0x78f6ff);
-      this.addArrow(startLeft + i * arrowStep, i % 2 === 0 ? 0xff3de8 : 0xff8cf4);
+    for (let i = 0; i < 8; i += 1) {
+      this.addAnimatedArrow(rightStart + i * step, 0x00eaff, i * 105);
+      this.addAnimatedArrow(leftStart + i * step, 0xff3de8, i * 105);
     }
   }
 
-  private addArrow(distance: number, color: number): void {
+  private addAnimatedArrow(distance: number, color: number, delay: number): void {
     const sample = this.sampleAtOffset(distance, 0);
+    const hex = `#${color.toString(16).padStart(6, '0')}`;
+
     const glow = this.scene.add
       .text(sample.x, sample.y, '>>>', {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '22px',
-        color: `#${color.toString(16).padStart(6, '0')}`,
-        letterSpacing: 1,
+        fontSize: '24px',
+        color: hex,
+        letterSpacing: 2,
       })
       .setOrigin(0.5)
       .setRotation(sample.angle)
-      .setAlpha(0.28)
+      .setAlpha(0.08)
+      .setScale(1.5, 1.75)
       .setDepth(-11)
       .setBlendMode(Phaser.BlendModes.ADD);
-    glow.setScale(1.45, 1.8);
 
-    this.scene.add
+    const arrow = this.scene.add
       .text(sample.x, sample.y, '>>>', {
         fontFamily: 'Arial Black, sans-serif',
         fontSize: '18px',
-        color: `#${color.toString(16).padStart(6, '0')}`,
-        letterSpacing: 1,
+        color: hex,
+        letterSpacing: 2,
       })
       .setOrigin(0.5)
       .setRotation(sample.angle)
-      .setAlpha(0.9)
-      .setDepth(-10);
+      .setAlpha(0.18)
+      .setDepth(-10)
+      .setBlendMode(Phaser.BlendModes.ADD);
+
+    this.scene.tweens.add({
+      targets: [arrow, glow],
+      alpha: { from: 0.12, to: 1 },
+      duration: 150,
+      yoyo: true,
+      hold: 80,
+      repeat: -1,
+      repeatDelay: 720,
+      delay,
+      ease: 'Sine.easeOut',
+    });
   }
 
   private drawEnergyPosts(): void {
@@ -258,7 +269,7 @@ export class OvalTrack {
 
   private drawScenery(): void {
     this.scene.add
-      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY - 15, 'NEON CIRCUIT', {
+      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY - 15, 'PHOTON CIRCUIT', {
         fontFamily: 'Arial Black, sans-serif',
         fontSize: '36px',
         color: '#dffcff',
@@ -271,7 +282,7 @@ export class OvalTrack {
       .setBlendMode(Phaser.BlendModes.ADD);
 
     this.scene.add
-      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY + 32, 'VELOCITY TEST  //  01', {
+      .text(TRACK_CONFIG.centerX, TRACK_CONFIG.centerY + 32, 'LIGHT SPEED TEST  //  01', {
         fontFamily: 'Arial, sans-serif',
         fontSize: '12px',
         color: '#7ceeff',
