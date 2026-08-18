@@ -1,10 +1,6 @@
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-html,
-body,
-#app {
+html, body, #app {
   width: 100%;
   height: 100%;
   margin: 0;
@@ -21,44 +17,52 @@ body {
 }
 
 .game-shell {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: #010207;
+  overflow: hidden;
+}
+
+/*
+ * Critical alignment rule:
+ * SVG and Pixi never size themselves independently. Both fill this one
+ * 16:9 viewport, whose logical coordinate space is always 1280x720.
+ */
+.game-viewport {
   position: relative;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   background: #010207;
 }
 
 .track-svg,
-.pixi-layer,
-.bridge-svg {
+.bridge-svg,
+.pixi-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.track-svg {
-  z-index: 1;
-  pointer-events: none;
-}
-
-.pixi-layer {
-  z-index: 2;
-}
-
-.bridge-svg {
-  z-index: 3;
-  pointer-events: none;
-}
+.track-svg { z-index: 1; pointer-events: none; }
+.pixi-layer { z-index: 2; pointer-events: auto; }
+.bridge-svg { z-index: 3; pointer-events: none; }
 
 .pixi-layer canvas {
+  position: absolute;
+  inset: 0;
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  margin: 0 auto;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0;
 }
 
 .pixi-boot {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 10;
   display: flex;
@@ -74,9 +78,9 @@ body {
 
 .track-title text {
   fill: #dffcff;
-  font: 700 34px Arial, sans-serif;
+  font: 700 32px Arial, sans-serif;
   letter-spacing: 4px;
-  opacity: .42;
+  opacity: .58;
   filter: url(#cyanGlow);
 }
 
@@ -84,43 +88,21 @@ body {
   fill: #7ceeff;
   font: 12px Arial, sans-serif;
   letter-spacing: 6px;
-  opacity: .45;
+  opacity: .5;
   filter: none;
 }
 
 .curve-chevron {
-  font: 900 21px Arial Black, Arial, sans-serif;
+  font: 900 23px Arial Black, Arial, sans-serif;
   dominant-baseline: middle;
   text-anchor: middle;
   opacity: .12;
   animation: chevronPulse 1.05s linear infinite;
 }
 
-.curve-chevron.cyan {
-  fill: #59f8ff;
-  filter: url(#cyanGlow);
-}
-
-.curve-chevron.magenta {
-  fill: #ff58e9;
-  filter: url(#magentaGlow);
-}
-
-.energy-node {
-  animation: nodePulse 1.8s ease-in-out infinite;
-}
-
-.bridge-shadow {
-  opacity: .74;
-}
-
-.bridge-deck {
-  opacity: .80;
-}
-
-.bridge-rail {
-  opacity: .95;
-}
+.curve-chevron.cyan { fill: #59f8ff; filter: url(#cyanGlow); }
+.curve-chevron.magenta { fill: #ff58e9; filter: url(#magentaGlow); }
+.energy-node { animation: nodePulse 1.8s ease-in-out infinite; }
 
 @keyframes chevronPulse {
   0%, 22%, 100% { opacity: .10; }
