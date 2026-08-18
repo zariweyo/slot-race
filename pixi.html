@@ -3,12 +3,81 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#03050c" />
-    <title>Slot Race · PixiJS</title>
+    <meta name="theme-color" content="#02040b" />
+    <title>Photon Circuit · PixiJS</title>
   </head>
   <body>
-    <div id="app">
-      <div id="pixi-boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#03050c;color:#7ceeff;font:16px monospace;white-space:pre-wrap;text-align:center;padding:24px;">BOOTING PIXI…</div>
+    <div id="app" class="game-shell">
+      <svg id="track-svg" class="track-svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <defs>
+          <radialGradient id="bgGlow" cx="50%" cy="48%" r="66%">
+            <stop offset="0" stop-color="#0c1e35" />
+            <stop offset="0.55" stop-color="#050a15" />
+            <stop offset="1" stop-color="#010207" />
+          </radialGradient>
+          <linearGradient id="roadGradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#141c2c" />
+            <stop offset="0.5" stop-color="#090e19" />
+            <stop offset="1" stop-color="#111828" />
+          </linearGradient>
+          <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="8" result="blur" />
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="magentaGlow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="7" result="blur" />
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="softShadow" x="-60%" y="-100%" width="220%" height="300%">
+            <feGaussianBlur stdDeviation="14" />
+          </filter>
+          <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+            <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#17304b" stroke-width="1" opacity=".24" />
+          </pattern>
+        </defs>
+
+        <rect width="1280" height="720" fill="url(#bgGlow)" />
+        <rect width="1280" height="720" fill="url(#grid)" opacity=".55" />
+        <ellipse cx="640" cy="355" rx="500" ry="270" fill="#071326" opacity=".26" filter="url(#softShadow)" />
+
+        <g id="track-base">
+          <path id="track-outer-glow" fill="none" stroke="#4528ff" stroke-width="188" opacity=".12" filter="url(#magentaGlow)" />
+          <path id="track-border" fill="none" stroke="#16243b" stroke-width="168" />
+          <path id="track-road" fill="none" stroke="url(#roadGradient)" stroke-width="152" />
+          <path id="track-inner-sheen" fill="none" stroke="#173e61" stroke-width="122" opacity=".18" />
+          <path id="track-edge-cyan" fill="none" stroke="#28efff" stroke-width="3" opacity=".8" filter="url(#cyanGlow)" />
+          <path id="track-edge-magenta" fill="none" stroke="#ff38df" stroke-width="3" opacity=".55" filter="url(#magentaGlow)" />
+          <path id="lane-a-dark" fill="none" stroke="#010309" stroke-width="7" />
+          <path id="lane-b-dark" fill="none" stroke="#010309" stroke-width="7" />
+          <path id="lane-a" fill="none" stroke="#84f8ff" stroke-width="1.8" opacity=".95" filter="url(#cyanGlow)" />
+          <path id="lane-b" fill="none" stroke="#ff72ee" stroke-width="1.8" opacity=".86" filter="url(#magentaGlow)" />
+        </g>
+
+        <g id="bridge-shadow">
+          <path id="bridge-under-shadow" fill="none" stroke="#00030a" stroke-width="188" opacity=".92" />
+        </g>
+        <g id="bridge-top">
+          <path id="bridge-border" fill="none" stroke="#213754" stroke-width="172" />
+          <path id="bridge-road" fill="none" stroke="#0d1421" stroke-width="154" />
+          <path id="bridge-cyan" fill="none" stroke="#2cf2ff" stroke-width="4" opacity=".95" filter="url(#cyanGlow)" />
+          <path id="bridge-magenta" fill="none" stroke="#ff43e5" stroke-width="3" opacity=".72" filter="url(#magentaGlow)" />
+          <path id="bridge-lane-a-dark" fill="none" stroke="#010309" stroke-width="7" />
+          <path id="bridge-lane-b-dark" fill="none" stroke="#010309" stroke-width="7" />
+          <path id="bridge-lane-a" fill="none" stroke="#a5fbff" stroke-width="2" filter="url(#cyanGlow)" />
+          <path id="bridge-lane-b" fill="none" stroke="#ff93f2" stroke-width="2" filter="url(#magentaGlow)" />
+        </g>
+
+        <g id="curve-arrows"></g>
+        <g id="track-decor"></g>
+
+        <g class="track-title">
+          <text x="640" y="335" text-anchor="middle">PHOTON CIRCUIT // ∞</text>
+          <text x="640" y="365" text-anchor="middle" class="subtitle">NEON OVERPASS TEST</text>
+        </g>
+      </svg>
+
+      <div id="pixi-layer" class="pixi-layer"></div>
+      <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
     </div>
     <script type="module" src="/src/pixi-main.ts"></script>
   </body>
