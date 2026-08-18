@@ -28,9 +28,6 @@
             <feGaussianBlur stdDeviation="7" result="blur" />
             <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
-          <filter id="bridgeShadow" x="-80%" y="-160%" width="260%" height="420%">
-            <feGaussianBlur stdDeviation="16" />
-          </filter>
           <pattern id="grid" width="52" height="52" patternUnits="userSpaceOnUse">
             <path d="M 52 0 L 0 0 0 52" fill="none" stroke="#17304b" stroke-width="1" opacity=".22" />
           </pattern>
@@ -39,7 +36,7 @@
         <rect width="1600" height="900" fill="url(#bgGlow)" />
         <rect width="1600" height="900" fill="url(#grid)" opacity=".58" />
 
-        <!-- This hidden path is the single authoritative geometry for SVG and Pixi. -->
+        <!-- Single authoritative geometry used by SVG and Pixi. -->
         <path id="track-source" fill="none" stroke="none"
           d="M 80 450
              C 180 150 330 150 430 450
@@ -64,7 +61,6 @@
 
         <g id="track-decor"></g>
         <g id="curve-arrows"></g>
-        <g id="bridge-layer"></g>
 
         <g class="track-title">
           <text x="800" y="420" text-anchor="middle">PHOTON CIRCUIT // TRINITY</text>
@@ -73,6 +69,12 @@
       </svg>
 
       <div id="pixi-layer" class="pixi-layer"></div>
+
+      <!-- Bridges live above Pixi so lower-level photons are genuinely occluded. -->
+      <svg id="bridge-svg" class="bridge-svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <g id="bridge-layer"></g>
+      </svg>
+
       <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
     </div>
     <script type="module" src="/src/pixi-main.ts"></script>
