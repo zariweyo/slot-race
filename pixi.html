@@ -37,7 +37,6 @@
           <rect width="1280" height="720" fill="url(#bgGlow)" />
           <rect width="1280" height="720" fill="url(#grid)" opacity=".55" />
 
-          <!-- One authoritative centreline. The visible lanes are derived from this once at startup. -->
           <path id="track-source" fill="none" stroke="none"
             d="M 640 360
                C 760 160 1010 135 1100 300
@@ -60,20 +59,20 @@
 
           <g id="curve-arrows"></g>
           <g id="track-decor"></g>
-
           <g class="track-title">
             <text x="640" y="326" text-anchor="middle">PHOTON CIRCUIT // 8</text>
-            <text x="640" y="352" text-anchor="middle" class="subtitle">NEON OVERPASS TEST</text>
+            <text x="640" y="352" text-anchor="middle" class="subtitle">LAYERED OVERPASS TEST</text>
           </g>
         </svg>
 
-        <div id="pixi-layer" class="pixi-layer"></div>
+        <div id="pixi-under" class="pixi-layer pixi-under"></div>
 
-        <!-- Only the elevated branch is above Pixi. It is intentionally translucent. -->
         <svg id="bridge-svg" class="bridge-svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           <g id="bridge-layer"></g>
         </svg>
 
+        <div id="pixi-over" class="pixi-layer pixi-over"></div>
+        <div id="pixi-ui" class="pixi-ui"></div>
         <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
       </div>
     </div>
