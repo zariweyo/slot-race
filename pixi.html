@@ -8,74 +8,74 @@
   </head>
   <body>
     <div id="app" class="game-shell">
-      <svg id="track-svg" class="track-svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <defs>
-          <radialGradient id="bgGlow" cx="50%" cy="50%" r="70%">
-            <stop offset="0" stop-color="#102842" />
-            <stop offset="0.48" stop-color="#07111f" />
-            <stop offset="1" stop-color="#010207" />
-          </radialGradient>
-          <linearGradient id="roadGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#18243a" />
-            <stop offset="0.45" stop-color="#090f1b" />
-            <stop offset="1" stop-color="#131d31" />
-          </linearGradient>
-          <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="8" result="blur" />
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <filter id="magentaGlow" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="7" result="blur" />
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <pattern id="grid" width="52" height="52" patternUnits="userSpaceOnUse">
-            <path d="M 52 0 L 0 0 0 52" fill="none" stroke="#17304b" stroke-width="1" opacity=".22" />
-          </pattern>
-        </defs>
+      <div id="game-viewport" class="game-viewport">
+        <svg id="track-svg" class="track-svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <defs>
+            <radialGradient id="bgGlow" cx="50%" cy="48%" r="70%">
+              <stop offset="0" stop-color="#102842" />
+              <stop offset="0.52" stop-color="#07111f" />
+              <stop offset="1" stop-color="#010207" />
+            </radialGradient>
+            <linearGradient id="roadGradient" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#17243a" />
+              <stop offset="0.5" stop-color="#090f1b" />
+              <stop offset="1" stop-color="#131d31" />
+            </linearGradient>
+            <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="7" result="blur" />
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="magentaGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="7" result="blur" />
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+              <path d="M48 0 L0 0 0 48" fill="none" stroke="#17304b" stroke-width="1" opacity=".22" />
+            </pattern>
+          </defs>
 
-        <rect width="1600" height="900" fill="url(#bgGlow)" />
-        <rect width="1600" height="900" fill="url(#grid)" opacity=".58" />
+          <rect width="1280" height="720" fill="url(#bgGlow)" />
+          <rect width="1280" height="720" fill="url(#grid)" opacity=".55" />
 
-        <!-- Single authoritative geometry used by SVG and Pixi. -->
-        <path id="track-source" fill="none" stroke="none"
-          d="M 80 450
-             C 180 150 330 150 430 450
-             C 530 750 650 750 750 450
-             C 850 150 970 150 1070 450
-             C 1170 750 1320 750 1520 450
-             C 1320 150 1170 150 1070 450
-             C 970 750 850 750 750 450
-             C 650 150 530 150 430 450
-             C 330 750 180 750 80 450 Z" />
+          <!-- One authoritative centreline. The visible lanes are derived from this once at startup. -->
+          <path id="track-source" fill="none" stroke="none"
+            d="M 640 360
+               C 760 160 1010 135 1100 300
+               C 1190 465 980 585 790 470
+               C 705 418 665 382 640 360
+               C 615 338 575 302 490 250
+               C 300 135 90 255 180 420
+               C 270 585 520 560 640 360 Z" />
 
-        <g id="track-base">
-          <path id="track-outer-glow" fill="none" stroke="#4a25ff" stroke-width="142" opacity=".11" filter="url(#magentaGlow)" />
-          <path id="track-border" fill="none" stroke="#182941" stroke-width="128" />
-          <path id="track-road" fill="none" stroke="url(#roadGradient)" stroke-width="116" />
-          <path id="track-inner-sheen" fill="none" stroke="#174d74" stroke-width="92" opacity=".18" />
-          <path id="lane-a-dark" fill="none" stroke="#010309" stroke-width="7" />
-          <path id="lane-b-dark" fill="none" stroke="#010309" stroke-width="7" />
-          <path id="lane-a" fill="none" stroke="#83f8ff" stroke-width="1.8" opacity=".94" filter="url(#cyanGlow)" />
-          <path id="lane-b" fill="none" stroke="#ff72ee" stroke-width="1.8" opacity=".84" filter="url(#magentaGlow)" />
-        </g>
+          <g id="track-base">
+            <path id="track-outer-glow" fill="none" stroke="#4a25ff" stroke-width="180" opacity=".11" filter="url(#magentaGlow)" />
+            <path id="track-border" fill="none" stroke="#182941" stroke-width="164" />
+            <path id="track-road" fill="none" stroke="url(#roadGradient)" stroke-width="148" />
+            <path id="track-inner-sheen" fill="none" stroke="#174d74" stroke-width="118" opacity=".18" />
+            <path id="lane-a-dark" fill="none" stroke="#010309" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+            <path id="lane-b-dark" fill="none" stroke="#010309" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+            <path id="lane-a" fill="none" stroke="#83f8ff" stroke-width="2" opacity=".96" filter="url(#cyanGlow)" stroke-linecap="round" stroke-linejoin="round" />
+            <path id="lane-b" fill="none" stroke="#ff72ee" stroke-width="2" opacity=".88" filter="url(#magentaGlow)" stroke-linecap="round" stroke-linejoin="round" />
+          </g>
 
-        <g id="track-decor"></g>
-        <g id="curve-arrows"></g>
+          <g id="curve-arrows"></g>
+          <g id="track-decor"></g>
 
-        <g class="track-title">
-          <text x="800" y="420" text-anchor="middle">PHOTON CIRCUIT // TRINITY</text>
-          <text x="800" y="450" text-anchor="middle" class="subtitle">3 OVERPASSES · MULTIPLAYER TRACK MODEL</text>
-        </g>
-      </svg>
+          <g class="track-title">
+            <text x="640" y="326" text-anchor="middle">PHOTON CIRCUIT // 8</text>
+            <text x="640" y="352" text-anchor="middle" class="subtitle">NEON OVERPASS TEST</text>
+          </g>
+        </svg>
 
-      <div id="pixi-layer" class="pixi-layer"></div>
+        <div id="pixi-layer" class="pixi-layer"></div>
 
-      <!-- Bridges live above Pixi so lower-level photons are genuinely occluded. -->
-      <svg id="bridge-svg" class="bridge-svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <g id="bridge-layer"></g>
-      </svg>
+        <!-- Only the elevated branch is above Pixi. It is intentionally translucent. -->
+        <svg id="bridge-svg" class="bridge-svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <g id="bridge-layer"></g>
+        </svg>
 
-      <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
+        <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
+      </div>
     </div>
     <script type="module" src="/src/pixi-main.ts"></script>
   </body>
