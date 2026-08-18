@@ -35,8 +35,10 @@ type TrackPoint = Point & {
 };
 
 type CachePoint = TrackPoint & {
-  nx: number;
-  ny: number;
+  worldX: number;
+  worldY: number;
+  worldNx: number;
+  worldNy: number;
 };
 
 type PhotonVisual = {
@@ -188,27 +190,31 @@ async function main(): Promise<void> {
     return BRIDGE_HEIGHT * smoothstep(rampProgress);
   };
 
-  const rawProjected: Array<{ x: number; y: number; elevation: number; distance: number }> = [];
+  const rawWorld: Array<{ worldX: number; worldY: number; elevation: number; distance: number; x: number; y: number }> = [];
   for (let i = 0; i < CACHE_SAMPLES; i += 1) {
     const distance = (i / CACHE_SAMPLES) * sourceLength;
     const p = source.getPointAtLength(distance);
     const elevation = elevationAt(distance);
     const projected = projectIso(p.x, p.y, elevation);
-    rawProjected.push({ ...projected, elevation, distance });
+    rawWorld.push({ worldX: p.x, worldY: p.y, elevation, distance, ...projected });
   }
 
-  const cache: CachePoint[] = rawProjected.map((p, i) => {
-    const before = rawProjected[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES];
-    const after = rawProjected[(i + 1) % CACHE_SAMPLES];
-    const dx = after.x - before.x;
-    const dy = after.y - before.y;
-    const mag = Math.hypot(dx, dy) || 1;
-    const nx = -dy / mag;
-    const ny = dx / mag;
-    const angle = Math.atan2(dy, dx);
+  const cache: CachePoint[] = rawWorld.map((p, i) => {
+    const before = rawWorld[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES];
+    const after = rawWorld[(i + 1) % CACHE_SAMPLES];
+
+    const worldDx = after.worldX - before.worldX;
+    const worldDy = after.worldY - before.worldY;
+    const worldMag = Math.hypot(worldDx, worldDy) || 1;
+    const worldNx = -worldDy / worldMag;
+    const worldNy = worldDx / worldMag;
+
+    const screenDx = after.x - before.x;
+    const screenDy = after.y - before.y;
+    const angle = Math.atan2(screenDy, screenDx);
     const layer: 0 | 1 = circularDelta(p.distance, bridgeTopDistance, sourceLength) <= BRIDGE_PLATEAU_HALF ? 1 : 0;
     const underBridge = circularDelta(p.distance, bridgeUnderDistance, sourceLength) <= BRIDGE_PLATEAU_HALF;
-    return { ...p, nx, ny, angle, layer, underBridge };
+    return { ...p, worldNx, worldNy, angle, layer, underBridge };
   });
 
   const sample = (distance: number, laneOffset = -LANE_OFFSET): TrackPoint => {
@@ -223,25 +229,40 @@ async function main(): Promise<void> {
     let angleDelta = b.angle - a.angle;
     if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
     if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
-    const nx = lerp(a.nx, b.nx);
-    const ny = lerp(a.ny, b.ny);
+
+    const worldX = lerp(a.worldX, b.worldX);
+    const worldY = lerp(a.worldY, b.worldY);
+    let worldNx = lerp(a.worldNx, b.worldNx);
+    let worldNy = lerp(a.worldNy, b.worldNy);
+    const normalMag = Math.hypot(worldNx, worldNy) || 1;
+    worldNx /= normalMag;
+    worldNy /= normalMag;
+    const elevation = lerp(a.elevation, b.elevation);
+    const projected = projectIso(worldX + worldNx * laneOffset, worldY + worldNy * laneOffset, elevation);
+
     return {
-      x: lerp(a.x, b.x) + nx * laneOffset,
-      y: lerp(a.y, b.y) + ny * laneOffset,
+      x: projected.x,
+      y: projected.y,
       angle: a.angle + angleDelta * t,
       distance: d,
       layer: t < 0.5 ? a.layer : b.layer,
       underBridge: t < 0.5 ? a.underBridge : b.underBridge,
-      elevation: lerp(a.elevation, b.elevation),
+      elevation,
     };
   };
 
-  const sampledPath = (offset = 0, start = 0, end = sourceLength, samples = SVG_SAMPLES): string => {
+  const sampledPath = (
+    offset = 0,
+    start = 0,
+    end = sourceLength,
+    samples = SVG_SAMPLES,
+    yShift = 0,
+  ): string => {
     let d = '';
     for (let i = 0; i <= samples; i += 1) {
       const at = start + ((end - start) * i) / samples;
       const p = sample(at, offset);
-      d += `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
+      d += `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${(p.y + yShift).toFixed(2)} `;
     }
     return d;
   };
@@ -277,19 +298,64 @@ async function main(): Promise<void> {
     });
   }
 
+  // Racing kerbs: long interior runs in each main bend, plus a shorter exterior exit strip.
+  const decor = document.querySelector<SVGGElement>('#track-decor');
+  if (decor) {
+    decor.replaceChildren();
+    const ns = 'http://www.w3.org/2000/svg';
+    const addKerbRun = (startFraction: number, endFraction: number, side: -1 | 1, blocks: number): void => {
+      const blockSpan = ((endFraction - startFraction) * sourceLength) / blocks;
+      for (let i = 0; i < blocks; i += 1) {
+        const start = startFraction * sourceLength + blockSpan * i;
+        const end = start + blockSpan * 0.92;
+        const kerb = document.createElementNS(ns, 'path');
+        kerb.setAttribute('d', sampledPath(side * (ROAD_HALF_WIDTH + 5), start, end, 6));
+        kerb.setAttribute('fill', 'none');
+        kerb.setAttribute('stroke', i % 2 === 0 ? '#ff334f' : '#f5f8ff');
+        kerb.setAttribute('stroke-width', '11');
+        kerb.setAttribute('stroke-linecap', 'butt');
+        kerb.setAttribute('opacity', '.92');
+        decor.appendChild(kerb);
+      }
+    };
+
+    // Right loop: inner kerb, then a short outside strip on exit.
+    addKerbRun(0.105, 0.305, -1, 18);
+    addKerbRun(0.305, 0.345, 1, 5);
+    // Left loop mirrors the treatment.
+    addKerbRun(0.605, 0.805, 1, 18);
+    addKerbRun(0.805, 0.845, -1, 5);
+  }
+
   const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
   if (!bridgeLayer) throw new Error('Missing #bridge-layer');
   bridgeLayer.replaceChildren();
+
   const plateauStart = bridgeTopDistance - BRIDGE_PLATEAU_HALF;
   const plateauEnd = bridgeTopDistance + BRIDGE_PLATEAU_HALF;
+  const rampStart = plateauStart - BRIDGE_RAMP_LENGTH;
+  const rampEnd = plateauEnd + BRIDGE_RAMP_LENGTH;
+
+  // Shadow and a faint full-length ramp surface make the elevation legible.
+  const bridgeShadow = sampledPath(0, rampStart, rampEnd, 190, 14);
+  const rampDeck = sampledPath(0, rampStart, rampEnd, 190);
+  const rampLeft = sampledPath(-ROAD_HALF_WIDTH, rampStart, rampEnd, 190);
+  const rampRight = sampledPath(ROAD_HALF_WIDTH, rampStart, rampEnd, 190);
+  bridgeLayer.appendChild(createBridgePath(bridgeShadow, '#00030a', 154, 0.24, 'bridge-shadow'));
+  bridgeLayer.appendChild(createBridgePath(rampDeck, '#162337', 146, 0.18, 'bridge-ramp-deck'));
+  bridgeLayer.appendChild(createBridgePath(rampLeft, '#34b8c5', 3, 0.48, 'bridge-ramp-edge'));
+  bridgeLayer.appendChild(createBridgePath(rampRight, '#b53aa8', 3, 0.42, 'bridge-ramp-edge'));
+
   const bridgeCenter = sampledPath(0, plateauStart, plateauEnd, 100);
   const bridgeLeft = sampledPath(-ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100);
   const bridgeRight = sampledPath(ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100);
   const bridgeLaneA = sampledPath(-LANE_OFFSET, plateauStart, plateauEnd, 100);
   const bridgeLaneB = sampledPath(LANE_OFFSET, plateauStart, plateauEnd, 100);
-  bridgeLayer.appendChild(createBridgePath(bridgeCenter, '#0d1625', 144, 0.42, 'bridge-deck'));
-  bridgeLayer.appendChild(createBridgePath(bridgeLeft, '#4cf4ff', 3.5, 0.88, 'bridge-edge'));
-  bridgeLayer.appendChild(createBridgePath(bridgeRight, '#ff54e7', 3.5, 0.76, 'bridge-edge'));
+
+  // Plateau is roughly 15% more opaque than the previous prototype.
+  bridgeLayer.appendChild(createBridgePath(bridgeCenter, '#111d2e', 144, 0.50, 'bridge-deck'));
+  bridgeLayer.appendChild(createBridgePath(bridgeLeft, '#4cf4ff', 3.5, 0.92, 'bridge-edge'));
+  bridgeLayer.appendChild(createBridgePath(bridgeRight, '#ff54e7', 3.5, 0.82, 'bridge-edge'));
   bridgeLayer.appendChild(createBridgePath(bridgeLaneA, '#b9fdff', 2.7, 1, 'bridge-rail'));
   bridgeLayer.appendChild(createBridgePath(bridgeLaneB, '#ff9bf3', 2.7, 0.96, 'bridge-rail'));
 
