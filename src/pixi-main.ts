@@ -7,7 +7,9 @@ const LANE_OFFSET = 22;
 const PATH_SAMPLES = 1200;
 const BRIDGE_HALF_SPAN = 76;
 const ROAD_HALF_WIDTH = 73;
-const FUTURE_LOOKAHEAD = 115;
+const BRIDGE_ENTRY_LEAD = 115;
+const TRAIL_SCALE = 0.70;
+const MAX_TRAIL_LENGTH = (40 + 520) * TRAIL_SCALE;
 
 const PHYSICS = {
   acceleration: 760,
@@ -221,6 +223,8 @@ async function main(): Promise<void> {
   const wrap = (distance: number): number => ((distance % totalLength) + totalLength) % totalLength;
   const bridgeTopDistance = totalLength * 0.5;
   const bridgeUnderDistance = 0;
+  const bridgeEnterAt = bridgeTopDistance - BRIDGE_HALF_SPAN - BRIDGE_ENTRY_LEAD;
+  const bridgeExitAt = bridgeTopDistance + BRIDGE_HALF_SPAN + MAX_TRAIL_LENGTH;
 
   const sample = (distance: number): TrackPoint => {
     const d = wrap(distance);
@@ -292,7 +296,7 @@ async function main(): Promise<void> {
   uiApp.stage.addChild(hud);
 
   const note = new Text({
-    text: 'HOLD SCREEN / SPACE  //  FUTURE-Z LAYER SWITCH',
+    text: 'HOLD SCREEN / SPACE  //  ZONE ENTRY / EXIT SWITCH',
     style: new TextStyle({ fill: '#72e9f7', fontSize: 13, fontFamily: 'Arial' }),
   });
   note.position.set(26, HEIGHT - 38);
@@ -335,7 +339,7 @@ async function main(): Promise<void> {
     rebuildPhoton(visual, ratio);
     visual.trail.clear();
     if (ratio <= 0.02) return;
-    const wakeLength = 40 + ratio * 520;
+    const wakeLength = (40 + ratio * 520) * TRAIL_SCALE;
     const points: TrackPoint[] = [];
     for (let i = 30; i >= 0; i -= 1) points.push(sample(distance - wakeLength * (i / 30)));
     const alphaScale = p.underBridge ? 0.38 : 1;
@@ -362,9 +366,7 @@ async function main(): Promise<void> {
     }
 
     const p = sample(distance);
-    const future = sample(distance + FUTURE_LOOKAHEAD);
-    const futureZ: 1 | 3 = future.layer === 1 ? 3 : 1;
-    if (futureZ !== currentZ) currentZ = futureZ;
+    currentZ = distance >= bridgeEnterAt && distance <= bridgeExitAt ? 3 : 1;
 
     const ratio = clamp01(speed / PHYSICS.maxSpeed);
     renderVisual(underVisual, p, ratio, currentZ === 1);
@@ -387,10 +389,11 @@ async function main(): Promise<void> {
       maxFrame = deltaMs;
     }
 
+    const nowDistanceToExit = Math.max(0, bridgeExitAt - distance);
     const currentLap = (now - lapStart) / 1000;
     const lastText = lastLap > 0 ? (lastLap / 1000).toFixed(3) : '--.---';
     const bestText = Number.isFinite(bestLap) ? (bestLap / 1000).toFixed(3) : '--.---';
-    hud.text = `PIXIJS // SVG 8\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   Z${currentZ} → FUTURE Z${futureZ}   ${p.underBridge ? 'UNDER' : p.layer === 1 ? 'OVER' : ''}`;
+    hud.text = `PIXIJS // SVG 8\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   Z${currentZ}   ${p.underBridge ? 'UNDER' : p.layer === 1 ? 'OVER' : ''}   EXIT ${currentZ === 3 ? nowDistanceToExit.toFixed(0) : '-'}`;
     uiApp.renderer.render(uiApp.stage);
 
     requestAnimationFrame(tick);
