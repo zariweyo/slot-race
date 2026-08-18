@@ -4,7 +4,6 @@ import './styles.css';
 const WIDTH = 1280;
 const HEIGHT = 720;
 const LANE_OFFSET = 22;
-const ROAD_HALF_WIDTH = 74;
 const PATH_SAMPLES = 1200;
 const BRIDGE_HALF_SPAN = 76;
 
@@ -65,19 +64,19 @@ function circularDelta(a: number, b: number, length: number): number {
 }
 
 function pathPoint(path: SVGPathElement, distance: number): Point {
-  const length = path.getTotalLength();
-  const d = ((distance % length) + length) % length;
+  const total = path.getTotalLength();
+  const d = ((distance % total) + total) % total;
   const p = path.getPointAtLength(d);
   return { x: p.x, y: p.y };
 }
 
 function sampledOffsetPath(source: SVGPathElement, offset: number): string {
-  const length = source.getTotalLength();
+  const total = source.getTotalLength();
   let d = '';
   for (let i = 0; i <= PATH_SAMPLES; i += 1) {
-    const at = (i / PATH_SAMPLES) * length;
+    const at = (i / PATH_SAMPLES) * total;
     const before = source.getPointAtLength(Math.max(0, at - 1.5));
-    const after = source.getPointAtLength(Math.min(length, at + 1.5));
+    const after = source.getPointAtLength(Math.min(total, at + 1.5));
     const dx = after.x - before.x;
     const dy = after.y - before.y;
     const mag = Math.hypot(dx, dy) || 1;
@@ -112,7 +111,6 @@ function createBridgePath(d: string, stroke: string, width: number, opacity: num
 }
 
 function pathSegment(path: SVGPathElement, center: number, halfSpan: number, samples = 70): string {
-  const length = path.getTotalLength();
   let d = '';
   for (let i = 0; i <= samples; i += 1) {
     const distance = center - halfSpan + ((halfSpan * 2) * i) / samples;
@@ -148,12 +146,9 @@ async function main(): Promise<void> {
   const laneA = setPath('lane-a', laneAD);
   setPath('lane-b', laneBD);
 
-  // IMPORTANT: from here on the player reads THIS visible SVG lane directly.
   const totalLength = laneA.getTotalLength();
   const wrap = (distance: number): number => ((distance % totalLength) + totalLength) % totalLength;
 
-  // The figure-eight crosses in the centre twice: once around half a lap and once at wrap-around.
-  // The half-lap branch is the elevated bridge; the wrap-around branch passes underneath.
   const bridgeTopDistance = totalLength * 0.5;
   const bridgeUnderDistance = 0;
 
@@ -176,7 +171,6 @@ async function main(): Promise<void> {
     };
   };
 
-  // Curve arrows are SVG/CSS only; no Pixi work per frame.
   const arrows = document.querySelector<SVGGElement>('#curve-arrows');
   if (arrows) {
     arrows.replaceChildren();
@@ -215,7 +209,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // One simple translucent overpass: literally the same visible lane/road segment drawn above Pixi.
   const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
   if (!bridgeLayer) throw new Error('Missing #bridge-layer');
   bridgeLayer.replaceChildren();
@@ -346,11 +339,9 @@ async function main(): Promise<void> {
       for (let i = segments; i >= 0; i -= 1) {
         points.push(sample(distance - wakeLength * (i / segments)));
       }
-      const heat = clamp01((ratio - 0.58) / 0.42);
-      const trailColor = mixColor(PHOTON.baseColor, PHOTON.limitColor, heat * 0.9);
       const alphaScale = p.underBridge ? 0.38 : 1;
       drawOpenPath(trail, points, 34 + ratio * 15, PHOTON.baseColor, (0.08 + ratio * 0.04) * alphaScale);
-      drawOpenPath(trail, points, 14 + ratio * 9, trailColor, (0.20 + ratio * 0.12) * alphaScale);
+      drawOpenPath(trail, points, 14 + ratio * 9, PHOTON.baseColor, (0.20 + ratio * 0.12) * alphaScale);
       drawOpenPath(trail, points, 4 + ratio * 4, 0xe9ffff, (0.70 + ratio * 0.24) * alphaScale);
     }
 
