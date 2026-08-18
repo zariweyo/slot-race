@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
-import './style.css';
+import './styles.css';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
