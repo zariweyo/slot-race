@@ -4,10 +4,11 @@ import './styles.css';
 const WIDTH = 1280;
 const HEIGHT = 720;
 const LANE_OFFSET = 22;
-const PATH_SAMPLES = 1200;
-const BRIDGE_PLATEAU_HALF = 76;
-const BRIDGE_RAMP_LENGTH = 190;
-const BRIDGE_HEIGHT = 92;
+const CACHE_SAMPLES = 4096;
+const SVG_SAMPLES = 1400;
+const BRIDGE_PLATEAU_HALF = 88;
+const BRIDGE_RAMP_LENGTH = 235;
+const BRIDGE_HEIGHT = 88;
 const ROAD_HALF_WIDTH = 73;
 const BRIDGE_ENTRY_LEAD = 115;
 const TRAIL_SCALE = 0.70;
@@ -31,6 +32,11 @@ type TrackPoint = Point & {
   layer: 0 | 1;
   underBridge: boolean;
   elevation: number;
+};
+
+type CachePoint = TrackPoint & {
+  nx: number;
+  ny: number;
 };
 
 type PhotonVisual = {
@@ -164,7 +170,7 @@ async function createLayer(hostId: string): Promise<Application> {
 }
 
 async function main(): Promise<void> {
-  setBoot('PIXI MODULE LOADED\nBUILDING ISOMETRIC TRACK...');
+  setBoot('PIXI MODULE LOADED\nPRECACHING ISOMETRIC TRACK...');
 
   const source = document.querySelector<SVGPathElement>('#track-source');
   if (!source) throw new Error('Missing #track-source');
@@ -182,36 +188,55 @@ async function main(): Promise<void> {
     return BRIDGE_HEIGHT * smoothstep(rampProgress);
   };
 
-  const centerProjected = (distance: number): Point => {
-    const d = wrap(distance);
-    const p = source.getPointAtLength(d);
-    return projectIso(p.x, p.y, elevationAt(d));
-  };
+  const rawProjected: Array<{ x: number; y: number; elevation: number; distance: number }> = [];
+  for (let i = 0; i < CACHE_SAMPLES; i += 1) {
+    const distance = (i / CACHE_SAMPLES) * sourceLength;
+    const p = source.getPointAtLength(distance);
+    const elevation = elevationAt(distance);
+    const projected = projectIso(p.x, p.y, elevation);
+    rawProjected.push({ ...projected, elevation, distance });
+  }
 
-  const sample = (distance: number, laneOffset = -LANE_OFFSET): TrackPoint => {
-    const d = wrap(distance);
-    const p = centerProjected(d);
-    const before = centerProjected(d - 2);
-    const after = centerProjected(d + 2);
+  const cache: CachePoint[] = rawProjected.map((p, i) => {
+    const before = rawProjected[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES];
+    const after = rawProjected[(i + 1) % CACHE_SAMPLES];
     const dx = after.x - before.x;
     const dy = after.y - before.y;
     const mag = Math.hypot(dx, dy) || 1;
     const nx = -dy / mag;
     const ny = dx / mag;
-    const onTop = circularDelta(d, bridgeTopDistance, sourceLength) <= BRIDGE_PLATEAU_HALF;
-    const under = circularDelta(d, bridgeUnderDistance, sourceLength) <= BRIDGE_PLATEAU_HALF;
+    const angle = Math.atan2(dy, dx);
+    const layer: 0 | 1 = circularDelta(p.distance, bridgeTopDistance, sourceLength) <= BRIDGE_PLATEAU_HALF ? 1 : 0;
+    const underBridge = circularDelta(p.distance, bridgeUnderDistance, sourceLength) <= BRIDGE_PLATEAU_HALF;
+    return { ...p, nx, ny, angle, layer, underBridge };
+  });
+
+  const sample = (distance: number, laneOffset = -LANE_OFFSET): TrackPoint => {
+    const d = wrap(distance);
+    const exact = (d / sourceLength) * CACHE_SAMPLES;
+    const i0 = Math.floor(exact) % CACHE_SAMPLES;
+    const i1 = (i0 + 1) % CACHE_SAMPLES;
+    const t = exact - Math.floor(exact);
+    const a = cache[i0];
+    const b = cache[i1];
+    const lerp = (x: number, y: number): number => x + (y - x) * t;
+    let angleDelta = b.angle - a.angle;
+    if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
+    if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
+    const nx = lerp(a.nx, b.nx);
+    const ny = lerp(a.ny, b.ny);
     return {
-      x: p.x + nx * laneOffset,
-      y: p.y + ny * laneOffset,
-      angle: Math.atan2(dy, dx),
+      x: lerp(a.x, b.x) + nx * laneOffset,
+      y: lerp(a.y, b.y) + ny * laneOffset,
+      angle: a.angle + angleDelta * t,
       distance: d,
-      layer: onTop ? 1 : 0,
-      underBridge: under,
-      elevation: elevationAt(d),
+      layer: t < 0.5 ? a.layer : b.layer,
+      underBridge: t < 0.5 ? a.underBridge : b.underBridge,
+      elevation: lerp(a.elevation, b.elevation),
     };
   };
 
-  const sampledPath = (offset = 0, start = 0, end = sourceLength, samples = PATH_SAMPLES): string => {
+  const sampledPath = (offset = 0, start = 0, end = sourceLength, samples = SVG_SAMPLES): string => {
     let d = '';
     for (let i = 0; i <= samples; i += 1) {
       const at = start + ((end - start) * i) / samples;
@@ -255,14 +280,13 @@ async function main(): Promise<void> {
   const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
   if (!bridgeLayer) throw new Error('Missing #bridge-layer');
   bridgeLayer.replaceChildren();
-
   const plateauStart = bridgeTopDistance - BRIDGE_PLATEAU_HALF;
   const plateauEnd = bridgeTopDistance + BRIDGE_PLATEAU_HALF;
-  const bridgeCenter = sampledPath(0, plateauStart, plateauEnd, 90);
-  const bridgeLeft = sampledPath(-ROAD_HALF_WIDTH, plateauStart, plateauEnd, 90);
-  const bridgeRight = sampledPath(ROAD_HALF_WIDTH, plateauStart, plateauEnd, 90);
-  const bridgeLaneA = sampledPath(-LANE_OFFSET, plateauStart, plateauEnd, 90);
-  const bridgeLaneB = sampledPath(LANE_OFFSET, plateauStart, plateauEnd, 90);
+  const bridgeCenter = sampledPath(0, plateauStart, plateauEnd, 100);
+  const bridgeLeft = sampledPath(-ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100);
+  const bridgeRight = sampledPath(ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100);
+  const bridgeLaneA = sampledPath(-LANE_OFFSET, plateauStart, plateauEnd, 100);
+  const bridgeLaneB = sampledPath(LANE_OFFSET, plateauStart, plateauEnd, 100);
   bridgeLayer.appendChild(createBridgePath(bridgeCenter, '#0d1625', 144, 0.42, 'bridge-deck'));
   bridgeLayer.appendChild(createBridgePath(bridgeLeft, '#4cf4ff', 3.5, 0.88, 'bridge-edge'));
   bridgeLayer.appendChild(createBridgePath(bridgeRight, '#ff54e7', 3.5, 0.76, 'bridge-edge'));
@@ -272,7 +296,7 @@ async function main(): Promise<void> {
   const bridgeEnterAt = bridgeTopDistance - BRIDGE_PLATEAU_HALF - BRIDGE_RAMP_LENGTH - BRIDGE_ENTRY_LEAD;
   const bridgeExitAt = bridgeTopDistance + BRIDGE_PLATEAU_HALF + BRIDGE_RAMP_LENGTH + MAX_TRAIL_LENGTH;
 
-  setBoot('SVG READY\nINITIALIZING PIXI ISOMETRIC LAYERS...');
+  setBoot('CACHE READY\nINITIALIZING PIXI LAYERS...');
   const underApp = await createLayer('pixi-under');
   const overApp = await createLayer('pixi-over');
   const uiApp = await createLayer('pixi-ui');
@@ -290,7 +314,7 @@ async function main(): Promise<void> {
   uiApp.stage.addChild(hud);
 
   const note = new Text({
-    text: 'HOLD SCREEN / SPACE  //  ISOMETRIC RAMP PROTOTYPE',
+    text: 'HOLD SCREEN / SPACE  //  PRECACHED ISO TRACK',
     style: new TextStyle({ fill: '#72e9f7', fontSize: 13, fontFamily: 'Arial' }),
   });
   note.position.set(26, HEIGHT - 38);
@@ -385,7 +409,7 @@ async function main(): Promise<void> {
     const currentLap = (now - lapStart) / 1000;
     const lastText = lastLap > 0 ? (lastLap / 1000).toFixed(3) : '--.---';
     const bestText = Number.isFinite(bestLap) ? (bestLap / 1000).toFixed(3) : '--.---';
-    hud.text = `PIXIJS // ISO SVG 8\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   Z${currentZ}   HEIGHT ${p.elevation.toFixed(0)}   ${p.underBridge ? 'UNDER' : p.layer === 1 ? 'OVER' : ''}`;
+    hud.text = `PIXIJS // ISO SVG 8 CACHE\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   Z${currentZ}   HEIGHT ${p.elevation.toFixed(0)}   ${p.underBridge ? 'UNDER' : p.layer === 1 ? 'OVER' : ''}`;
     uiApp.renderer.render(uiApp.stage);
     requestAnimationFrame(tick);
   };
