@@ -19,6 +19,9 @@ const PHYSICS = {
 };
 
 const boot = document.querySelector<HTMLDivElement>('#pixi-boot');
+const setBoot = (message: string): void => {
+  if (boot) boot.textContent = message;
+};
 
 function showBootError(error: unknown): never {
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
@@ -30,26 +33,34 @@ function showBootError(error: unknown): never {
   throw error;
 }
 
+setBoot('PIXI MODULE LOADED\nINITIALIZING WEBGL...');
+
 const app = new Application();
 
 try {
-  await app.init({
-    width: WIDTH,
-    height: HEIGHT,
-    background: '#03050c',
-    antialias: true,
-    resolution: 1,
-    autoDensity: true,
-    preference: 'webgl',
-  });
+  await Promise.race([
+    app.init({
+      width: WIDTH,
+      height: HEIGHT,
+      background: '#03050c',
+      antialias: true,
+      resolution: 1,
+      autoDensity: true,
+      preference: 'webgl',
+    }),
+    new Promise<never>((_, reject) => {
+      window.setTimeout(() => reject(new Error('Pixi app.init() timed out after 5000 ms')), 5000);
+    }),
+  ]);
 } catch (error) {
   showBootError(error);
 }
 
+setBoot('PIXI INITIALIZED\nATTACHING CANVAS...');
+
 const host = document.querySelector<HTMLDivElement>('#app');
 if (!host) showBootError(new Error('Missing #app container'));
 
-boot?.remove();
 host.appendChild(app.canvas);
 app.canvas.style.width = '100%';
 app.canvas.style.height = '100%';
@@ -155,6 +166,8 @@ app.stage.addChild(hud);
 const note = new Text({ text: 'HOLD SCREEN / SPACE TO ACCELERATE', style: new TextStyle({ fill: '#77ddeb', fontSize: 13, fontFamily: 'Arial' }) });
 note.position.set(28, HEIGHT - 36);
 app.stage.addChild(note);
+
+boot?.remove();
 
 let distance = 110;
 let speed = 0;
