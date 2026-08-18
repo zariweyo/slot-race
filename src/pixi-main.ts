@@ -7,6 +7,7 @@ const LANE_OFFSET = 22;
 const PATH_SAMPLES = 1200;
 const BRIDGE_HALF_SPAN = 76;
 const ROAD_HALF_WIDTH = 73;
+const FUTURE_LOOKAHEAD = 115;
 
 const PHYSICS = {
   acceleration: 760,
@@ -25,6 +26,14 @@ type TrackPoint = Point & {
   distance: number;
   layer: 0 | 1;
   underBridge: boolean;
+};
+
+type PhotonVisual = {
+  root: Container;
+  trail: Graphics;
+  glow: Graphics;
+  body: Graphics;
+  tip: Graphics;
 };
 
 const boot = document.querySelector<HTMLDivElement>('#pixi-boot');
@@ -144,8 +153,53 @@ function drawOpenPath(graphics: Graphics, points: Point[], width: number, color:
   graphics.stroke({ width, color, alpha });
 }
 
+function createPhotonVisual(): PhotonVisual {
+  const root = new Container();
+  const trail = new Graphics();
+  const glow = new Graphics();
+  const body = new Graphics();
+  const tip = new Graphics();
+  root.addChild(glow, body, tip);
+  return { root, trail, glow, body, tip };
+}
+
+function rebuildPhoton(visual: PhotonVisual, ratio: number): void {
+  const heat = clamp01((ratio - 0.58) / 0.42);
+  const bodyColor = mixColor(PHOTON.baseColor, 0xff7a36, heat * 0.42);
+  const tipColor = mixColor(PHOTON.baseColor, PHOTON.limitColor, heat);
+  visual.glow.clear().ellipse(-5, 0, 58, 26).fill({ color: tipColor, alpha: 0.12 + ratio * 0.10 });
+  visual.body.clear().poly([
+    42, 0, 24, -7, 6, -11, -13, -10, -29, -5, -38, 0,
+    -29, 5, -13, 10, 6, 11, 24, 7,
+  ]).fill({ color: bodyColor, alpha: 0.98 });
+  visual.body.poly([30, 0, 14, -3.5, -5, -5, -24, 0, -5, 5, 14, 3.5]).fill({ color: 0xffffff, alpha: 0.9 });
+  visual.tip.clear().poly([42, 0, 25, -6, 25, 6]).fill({ color: tipColor, alpha: 1 });
+}
+
+async function createLayer(hostId: string): Promise<Application> {
+  const app = new Application();
+  await app.init({
+    width: WIDTH,
+    height: HEIGHT,
+    backgroundAlpha: 0,
+    antialias: true,
+    resolution: 1,
+    autoDensity: false,
+    preference: 'webgl',
+    autoStart: false,
+  });
+  const host = document.querySelector<HTMLDivElement>(`#${hostId}`);
+  if (!host) throw new Error(`Missing #${hostId}`);
+  host.appendChild(app.canvas);
+  app.canvas.width = WIDTH;
+  app.canvas.height = HEIGHT;
+  app.canvas.style.width = '100%';
+  app.canvas.style.height = '100%';
+  return app;
+}
+
 async function main(): Promise<void> {
-  setBoot('PIXI MODULE LOADED\nBUILDING ALIGNED SVG TRACK...');
+  setBoot('PIXI MODULE LOADED\nBUILDING LAYERED TRACK...');
 
   const source = document.querySelector<SVGPathElement>('#track-source');
   if (!source) throw new Error('Missing #track-source');
@@ -170,10 +224,9 @@ async function main(): Promise<void> {
 
   const sample = (distance: number): TrackPoint => {
     const d = wrap(distance);
-    const epsilon = 2;
     const p = laneA.getPointAtLength(d);
-    const before = laneA.getPointAtLength(wrap(d - epsilon));
-    const after = laneA.getPointAtLength(wrap(d + epsilon));
+    const before = laneA.getPointAtLength(wrap(d - 2));
+    const after = laneA.getPointAtLength(wrap(d + 2));
     const onTop = circularDelta(d, bridgeTopDistance, totalLength) <= BRIDGE_HALF_SPAN;
     const under = circularDelta(d, bridgeUnderDistance, totalLength) <= BRIDGE_HALF_SPAN;
     return {
@@ -205,29 +258,9 @@ async function main(): Promise<void> {
     });
   }
 
-  const decor = document.querySelector<SVGGElement>('#track-decor');
-  if (decor) {
-    decor.replaceChildren();
-    const ns = 'http://www.w3.org/2000/svg';
-    for (let i = 0; i < 28; i += 1) {
-      const p = sample((i / 28) * totalLength);
-      const circle = document.createElementNS(ns, 'circle');
-      circle.setAttribute('cx', p.x.toFixed(2));
-      circle.setAttribute('cy', p.y.toFixed(2));
-      circle.setAttribute('r', i % 4 === 0 ? '3.2' : '2');
-      circle.setAttribute('fill', i % 2 === 0 ? '#55f6ff' : '#ff52e5');
-      circle.setAttribute('class', 'energy-node');
-      circle.setAttribute('opacity', '.5');
-      circle.style.animationDelay = `${(i % 9) * 120}ms`;
-      decor.appendChild(circle);
-    }
-  }
-
-  const bridgeSvg = document.querySelector<SVGSVGElement>('#bridge-svg');
   const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
-  if (!bridgeSvg || !bridgeLayer) throw new Error('Missing bridge overlay');
+  if (!bridgeLayer) throw new Error('Missing #bridge-layer');
   bridgeLayer.replaceChildren();
-
   const sourceLength = source.getTotalLength();
   const sourceBridgeCenter = sourceLength * 0.5;
   const centerBridge = pathSegment(source, sourceBridgeCenter, BRIDGE_HALF_SPAN, 80);
@@ -235,83 +268,42 @@ async function main(): Promise<void> {
   const rightShoulder = offsetSegment(source, sourceBridgeCenter, BRIDGE_HALF_SPAN, ROAD_HALF_WIDTH, 80);
   const laneABridge = pathSegment(laneA, bridgeTopDistance, BRIDGE_HALF_SPAN, 80);
   const laneBBridge = pathSegment(laneB, laneB.getTotalLength() * 0.5, BRIDGE_HALF_SPAN, 80);
-
-  // Transparent deck: enough to read the upper road while still seeing the road below.
   bridgeLayer.appendChild(createBridgePath(centerBridge, '#0d1625', 144, 0.36, 'bridge-deck'));
-  // Only the two outer shoulders get strong borders; there are no border caps across the road.
   bridgeLayer.appendChild(createBridgePath(leftShoulder, '#4cf4ff', 3.5, 0.84, 'bridge-edge'));
   bridgeLayer.appendChild(createBridgePath(rightShoulder, '#ff54e7', 3.5, 0.72, 'bridge-edge'));
-  // Upper rails stay crisp.
   bridgeLayer.appendChild(createBridgePath(laneABridge, '#b9fdff', 2.6, 1, 'bridge-rail'));
   bridgeLayer.appendChild(createBridgePath(laneBBridge, '#ff9bf3', 2.6, 0.95, 'bridge-rail'));
 
-  // Fade the lower crossing rails locally by covering them with a translucent road-colored strip.
-  const underFade = createBridgePath(centerBridge, '#0a111d', 34, 0.30, 'under-rail-fade');
-  bridgeLayer.insertBefore(underFade, bridgeLayer.firstChild);
+  setBoot('SVG READY\nINITIALIZING PIXI Z1 / Z3...');
+  const underApp = await createLayer('pixi-under');
+  const overApp = await createLayer('pixi-over');
+  const uiApp = await createLayer('pixi-ui');
 
-  const app = new Application();
-  setBoot('SVG READY\nINITIALIZING PIXI 1280x720...');
-  await app.init({
-    width: WIDTH,
-    height: HEIGHT,
-    backgroundAlpha: 0,
-    antialias: true,
-    resolution: 1,
-    autoDensity: false,
-    preference: 'webgl',
-  });
-
-  const host = document.querySelector<HTMLDivElement>('#pixi-layer');
-  if (!host) throw new Error('Missing #pixi-layer');
-  host.appendChild(app.canvas);
-  app.canvas.width = WIDTH;
-  app.canvas.height = HEIGHT;
-  app.canvas.style.width = '100%';
-  app.canvas.style.height = '100%';
-  app.canvas.style.touchAction = 'none';
-
-  const trail = new Graphics();
-  app.stage.addChild(trail);
-
-  const photon = new Container();
-  const glow = new Graphics();
-  const body = new Graphics();
-  const tip = new Graphics();
-  photon.addChild(glow, body, tip);
-  app.stage.addChild(photon);
-
-  const rebuildPhoton = (ratio: number): void => {
-    const heat = clamp01((ratio - 0.58) / 0.42);
-    const bodyColor = mixColor(PHOTON.baseColor, 0xff7a36, heat * 0.42);
-    const tipColor = mixColor(PHOTON.baseColor, PHOTON.limitColor, heat);
-    glow.clear().ellipse(-5, 0, 58, 26).fill({ color: tipColor, alpha: 0.12 + ratio * 0.10 });
-    body.clear().poly([
-      42, 0, 24, -7, 6, -11, -13, -10, -29, -5, -38, 0,
-      -29, 5, -13, 10, 6, 11, 24, 7,
-    ]).fill({ color: bodyColor, alpha: 0.98 });
-    body.poly([30, 0, 14, -3.5, -5, -5, -24, 0, -5, 5, 14, 3.5]).fill({ color: 0xffffff, alpha: 0.9 });
-    tip.clear().poly([42, 0, 25, -6, 25, 6]).fill({ color: tipColor, alpha: 1 });
-  };
+  const underVisual = createPhotonVisual();
+  const overVisual = createPhotonVisual();
+  underApp.stage.addChild(underVisual.trail, underVisual.root);
+  overApp.stage.addChild(overVisual.trail, overVisual.root);
 
   const hud = new Text({
     text: '',
     style: new TextStyle({ fill: '#dffcff', fontSize: 17, fontFamily: 'monospace', lineHeight: 23 }),
   });
   hud.position.set(26, 24);
-  app.stage.addChild(hud);
+  uiApp.stage.addChild(hud);
 
   const note = new Text({
-    text: 'HOLD SCREEN / SPACE  //  SVG LANE IS AUTHORITATIVE',
+    text: 'HOLD SCREEN / SPACE  //  FUTURE-Z LAYER SWITCH',
     style: new TextStyle({ fill: '#72e9f7', fontSize: 13, fontFamily: 'Arial' }),
   });
   note.position.set(26, HEIGHT - 38);
-  app.stage.addChild(note);
+  uiApp.stage.addChild(note);
 
   boot?.remove();
 
   let distance = 90;
   let speed = 0;
   let throttle = false;
+  let currentZ: 1 | 3 = 1;
   let frames = 0;
   let elapsed = 0;
   let fps = 0;
@@ -322,23 +314,47 @@ async function main(): Promise<void> {
   let lapStart = performance.now();
   let lastLap = 0;
   let bestLap = Number.POSITIVE_INFINITY;
-  let lastBridgeLayer: 0 | 1 | -1 = -1;
+  let lastTime = performance.now();
 
-  window.addEventListener('keydown', (event) => { if (event.code === 'Space') throttle = true; });
-  window.addEventListener('keyup', (event) => { if (event.code === 'Space') throttle = false; });
-  app.canvas.addEventListener('pointerdown', () => { throttle = true; });
-  window.addEventListener('pointerup', () => { throttle = false; });
-  window.addEventListener('pointercancel', () => { throttle = false; });
+  const setThrottle = (value: boolean): void => { throttle = value; };
+  window.addEventListener('keydown', (event) => { if (event.code === 'Space') setThrottle(true); });
+  window.addEventListener('keyup', (event) => { if (event.code === 'Space') setThrottle(false); });
+  const uiCanvas = uiApp.canvas;
+  uiCanvas.style.touchAction = 'none';
+  uiCanvas.addEventListener('pointerdown', () => setThrottle(true));
+  window.addEventListener('pointerup', () => setThrottle(false));
+  window.addEventListener('pointercancel', () => setThrottle(false));
 
-  app.ticker.add((ticker) => {
-    const dt = Math.min(ticker.deltaMS / 1000, 0.04);
+  const renderVisual = (visual: PhotonVisual, p: TrackPoint, ratio: number, active: boolean): void => {
+    visual.root.visible = active;
+    visual.trail.visible = active;
+    if (!active) return;
+    visual.root.position.set(p.x, p.y);
+    visual.root.rotation = p.angle;
+    visual.root.alpha = p.underBridge ? 0.45 : 1;
+    rebuildPhoton(visual, ratio);
+    visual.trail.clear();
+    if (ratio <= 0.02) return;
+    const wakeLength = 40 + ratio * 520;
+    const points: TrackPoint[] = [];
+    for (let i = 30; i >= 0; i -= 1) points.push(sample(distance - wakeLength * (i / 30)));
+    const alphaScale = p.underBridge ? 0.38 : 1;
+    drawOpenPath(visual.trail, points, 34 + ratio * 15, PHOTON.baseColor, (0.08 + ratio * 0.04) * alphaScale);
+    drawOpenPath(visual.trail, points, 14 + ratio * 9, PHOTON.baseColor, (0.20 + ratio * 0.12) * alphaScale);
+    drawOpenPath(visual.trail, points, 4 + ratio * 4, 0xe9ffff, (0.70 + ratio * 0.24) * alphaScale);
+  };
+
+  const tick = (now: number): void => {
+    const deltaMs = Math.min(now - lastTime, 40);
+    lastTime = now;
+    const dt = deltaMs / 1000;
+
     speed += (throttle ? PHYSICS.acceleration : -PHYSICS.coastDrag) * dt;
     speed = Math.max(0, Math.min(PHYSICS.maxSpeed, speed));
-
     previousDistance = distance;
     distance = wrap(distance + speed * dt);
+
     if (speed > 50 && distance < previousDistance) {
-      const now = performance.now();
       lastLap = now - lapStart;
       bestLap = Math.min(bestLap, lastLap);
       lapStart = now;
@@ -346,37 +362,21 @@ async function main(): Promise<void> {
     }
 
     const p = sample(distance);
-    photon.position.set(p.x, p.y);
-    photon.rotation = p.angle;
-    photon.alpha = p.underBridge ? 0.45 : 1;
-
-    // The DOM bridge must be below Pixi on the upper pass and above Pixi on the lower pass.
-    const desiredLayer: 0 | 1 = p.layer === 1 ? 0 : 1;
-    if (desiredLayer !== lastBridgeLayer) {
-      bridgeSvg.style.zIndex = desiredLayer === 0 ? '2' : '3';
-      host.style.zIndex = desiredLayer === 0 ? '3' : '2';
-      lastBridgeLayer = desiredLayer;
-    }
+    const future = sample(distance + FUTURE_LOOKAHEAD);
+    const futureZ: 1 | 3 = future.layer === 1 ? 3 : 1;
+    if (futureZ !== currentZ) currentZ = futureZ;
 
     const ratio = clamp01(speed / PHYSICS.maxSpeed);
-    rebuildPhoton(ratio);
+    renderVisual(underVisual, p, ratio, currentZ === 1);
+    renderVisual(overVisual, p, ratio, currentZ === 3);
 
-    trail.clear();
-    if (ratio > 0.02) {
-      const wakeLength = 40 + ratio * 520;
-      const segments = 30;
-      const points: TrackPoint[] = [];
-      for (let i = segments; i >= 0; i -= 1) points.push(sample(distance - wakeLength * (i / segments)));
-      const alphaScale = p.underBridge ? 0.38 : 1;
-      drawOpenPath(trail, points, 34 + ratio * 15, PHOTON.baseColor, (0.08 + ratio * 0.04) * alphaScale);
-      drawOpenPath(trail, points, 14 + ratio * 9, PHOTON.baseColor, (0.20 + ratio * 0.12) * alphaScale);
-      drawOpenPath(trail, points, 4 + ratio * 4, 0xe9ffff, (0.70 + ratio * 0.24) * alphaScale);
-    }
+    underApp.renderer.render(underApp.stage);
+    overApp.renderer.render(overApp.stage);
 
     frames += 1;
-    elapsed += ticker.deltaMS;
-    maxWindow += ticker.deltaMS;
-    maxFrame = Math.max(maxFrame, ticker.deltaMS);
+    elapsed += deltaMs;
+    maxWindow += deltaMs;
+    maxFrame = Math.max(maxFrame, deltaMs);
     if (elapsed >= 500) {
       fps = (frames * 1000) / elapsed;
       frames = 0;
@@ -384,14 +384,21 @@ async function main(): Promise<void> {
     }
     if (maxWindow >= 5000) {
       maxWindow = 0;
-      maxFrame = ticker.deltaMS;
+      maxFrame = deltaMs;
     }
 
-    const now = performance.now();
     const currentLap = (now - lapStart) / 1000;
     const lastText = lastLap > 0 ? (lastLap / 1000).toFixed(3) : '--.---';
     const bestText = Number.isFinite(bestLap) ? (bestLap / 1000).toFixed(3) : '--.---';
-    hud.text = `PIXIJS // SVG 8\nFPS ${fps.toFixed(1)}   FRAME ${ticker.deltaMS.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   ${p.underBridge ? 'UNDER BRIDGE' : p.layer === 1 ? 'OVER BRIDGE' : ''}`;
+    hud.text = `PIXIJS // SVG 8\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   Z${currentZ} → FUTURE Z${futureZ}   ${p.underBridge ? 'UNDER' : p.layer === 1 ? 'OVER' : ''}`;
+    uiApp.renderer.render(uiApp.stage);
+
+    requestAnimationFrame(tick);
+  };
+
+  requestAnimationFrame((now) => {
+    lastTime = now;
+    tick(now);
   });
 }
 
