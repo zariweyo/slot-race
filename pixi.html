@@ -37,14 +37,17 @@
           <rect width="1280" height="720" fill="url(#bgGlow)" />
           <rect width="1280" height="720" fill="url(#grid)" opacity=".55" />
 
+          <!-- Longer figure-eight: long straight approaches around the crossing so bridge ramps avoid curves. -->
           <path id="track-source" fill="none" stroke="none"
             d="M 640 360
-               C 760 160 1010 135 1100 300
-               C 1190 465 980 585 790 470
-               C 705 418 665 382 640 360
-               C 615 338 575 302 490 250
-               C 300 135 90 255 180 420
-               C 270 585 520 560 640 360 Z" />
+               L 805 250
+               C 955 150 1130 190 1160 330
+               C 1190 470 1025 565 865 485
+               L 640 360
+               L 415 235
+               C 255 155 90 250 120 390
+               C 150 530 325 570 475 470
+               L 640 360 Z" />
 
           <g id="track-base">
             <path id="track-outer-glow" fill="none" stroke="#4a25ff" stroke-width="180" opacity=".11" filter="url(#magentaGlow)" />
@@ -60,17 +63,15 @@
           <g id="curve-arrows"></g>
           <g id="track-decor"></g>
           <g class="track-title">
-            <text x="640" y="326" text-anchor="middle">PHOTON CIRCUIT // 8</text>
-            <text x="640" y="352" text-anchor="middle" class="subtitle">LAYERED OVERPASS TEST</text>
+            <text x="640" y="326" text-anchor="middle">PHOTON CIRCUIT // ISO 8</text>
+            <text x="640" y="352" text-anchor="middle" class="subtitle">PRECACHED RAMP TEST</text>
           </g>
         </svg>
 
         <div id="pixi-under" class="pixi-layer pixi-under"></div>
-
         <svg id="bridge-svg" class="bridge-svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           <g id="bridge-layer"></g>
         </svg>
-
         <div id="pixi-over" class="pixi-layer pixi-over"></div>
         <div id="pixi-ui" class="pixi-ui"></div>
         <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
