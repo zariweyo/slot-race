@@ -25,11 +25,6 @@ body {
   overflow: hidden;
 }
 
-/*
- * Critical alignment rule:
- * SVG and Pixi never size themselves independently. Both fill this one
- * 16:9 viewport, whose logical coordinate space is always 1280x720.
- */
 .game-viewport {
   position: relative;
   width: min(100vw, calc(100vh * 16 / 9));
@@ -41,18 +36,23 @@ body {
 
 .track-svg,
 .bridge-svg,
-.pixi-layer {
+.pixi-layer,
+.pixi-ui {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-.track-svg { z-index: 1; pointer-events: none; }
-.pixi-layer { z-index: 2; pointer-events: auto; }
-.bridge-svg { z-index: 3; pointer-events: none; }
+/* Explicit depth model: SVG z0 -> Pixi z1 -> bridge SVG z2 -> Pixi z3 -> UI z4. */
+.track-svg { z-index: 0; pointer-events: none; }
+.pixi-under { z-index: 1; pointer-events: none; }
+.bridge-svg { z-index: 2; pointer-events: none; }
+.pixi-over { z-index: 3; pointer-events: none; }
+.pixi-ui { z-index: 4; pointer-events: auto; }
 
-.pixi-layer canvas {
+.pixi-layer canvas,
+.pixi-ui canvas {
   position: absolute;
   inset: 0;
   display: block;
