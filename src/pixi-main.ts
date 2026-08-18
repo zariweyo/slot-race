@@ -16,14 +16,11 @@ const MAX_TRAIL_LENGTH = (40 + 520) * TRAIL_SCALE;
 
 const PHYSICS = {
   acceleration: 760,
-  coastDrag: 260,
+  coastDrag: 520,
   maxSpeed: 2350,
 };
 
-const PHOTON = {
-  baseColor: 0x27e7ff,
-  limitColor: 0xff2638,
-};
+const LIMIT_COLOR = 0xff2638;
 
 type Point = { x: number; y: number };
 type TrackPoint = Point & {
@@ -47,6 +44,19 @@ type PhotonVisual = {
   glow: Graphics;
   body: Graphics;
   tip: Graphics;
+};
+
+type Player = {
+  id: 1 | 2;
+  name: string;
+  color: number;
+  laneOffset: number;
+  distance: number;
+  speed: number;
+  throttle: boolean;
+  currentZ: 1 | 3;
+  underVisual: PhotonVisual;
+  overVisual: PhotonVisual;
 };
 
 const boot = document.querySelector<HTMLDivElement>('#pixi-boot');
@@ -136,17 +146,16 @@ function createPhotonVisual(): PhotonVisual {
   return { root, trail, glow, body, tip };
 }
 
-function rebuildPhoton(visual: PhotonVisual, ratio: number): void {
+function rebuildPhoton(visual: PhotonVisual, ratio: number, baseColor: number): void {
   const heat = clamp01((ratio - 0.58) / 0.42);
-  const bodyColor = mixColor(PHOTON.baseColor, 0xff7a36, heat * 0.42);
-  const tipColor = mixColor(PHOTON.baseColor, PHOTON.limitColor, heat);
-  visual.glow.clear().ellipse(-5, 0, 58, 26).fill({ color: tipColor, alpha: 0.12 + ratio * 0.10 });
-  visual.body.clear().poly([
-    42, 0, 24, -7, 6, -11, -13, -10, -29, -5, -38, 0,
-    -29, 5, -13, 10, 6, 11, 24, 7,
-  ]).fill({ color: bodyColor, alpha: 0.98 });
-  visual.body.poly([30, 0, 14, -3.5, -5, -5, -24, 0, -5, 5, 14, 3.5]).fill({ color: 0xffffff, alpha: 0.9 });
-  visual.tip.clear().poly([42, 0, 25, -6, 25, 6]).fill({ color: tipColor, alpha: 1 });
+  const bodyColor = mixColor(baseColor, 0xff7a36, heat * 0.40);
+  const tipColor = mixColor(baseColor, LIMIT_COLOR, heat);
+
+  // Smaller, rounder photon: compact capsule/teardrop rather than a sharp spear.
+  visual.glow.clear().ellipse(-2, 0, 40, 20).fill({ color: tipColor, alpha: 0.12 + ratio * 0.10 });
+  visual.body.clear().ellipse(-3, 0, 25, 11).fill({ color: bodyColor, alpha: 0.98 });
+  visual.body.ellipse(2, 0, 15, 6).fill({ color: 0xffffff, alpha: 0.72 });
+  visual.tip.clear().circle(18, 0, 5.5).fill({ color: tipColor, alpha: 1 });
 }
 
 async function createLayer(hostId: string): Promise<Application> {
@@ -202,13 +211,11 @@ async function main(): Promise<void> {
   const cache: CachePoint[] = rawWorld.map((p, i) => {
     const before = rawWorld[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES];
     const after = rawWorld[(i + 1) % CACHE_SAMPLES];
-
     const worldDx = after.worldX - before.worldX;
     const worldDy = after.worldY - before.worldY;
     const worldMag = Math.hypot(worldDx, worldDy) || 1;
     const worldNx = -worldDy / worldMag;
     const worldNy = worldDx / worldMag;
-
     const screenDx = after.x - before.x;
     const screenDy = after.y - before.y;
     const angle = Math.atan2(screenDy, screenDx);
@@ -251,13 +258,7 @@ async function main(): Promise<void> {
     };
   };
 
-  const sampledPath = (
-    offset = 0,
-    start = 0,
-    end = sourceLength,
-    samples = SVG_SAMPLES,
-    yShift = 0,
-  ): string => {
+  const sampledPath = (offset = 0, start = 0, end = sourceLength, samples = SVG_SAMPLES, yShift = 0): string => {
     let d = '';
     for (let i = 0; i <= samples; i += 1) {
       const at = start + ((end - start) * i) / samples;
@@ -298,7 +299,6 @@ async function main(): Promise<void> {
     });
   }
 
-  // Racing kerbs: long interior runs in each main bend, plus a shorter exterior exit strip.
   const decor = document.querySelector<SVGGElement>('#track-decor');
   if (decor) {
     decor.replaceChildren();
@@ -318,11 +318,8 @@ async function main(): Promise<void> {
         decor.appendChild(kerb);
       }
     };
-
-    // Right loop: inner kerb, then a short outside strip on exit.
     addKerbRun(0.105, 0.305, -1, 18);
     addKerbRun(0.305, 0.345, 1, 5);
-    // Left loop mirrors the treatment.
     addKerbRun(0.605, 0.805, 1, 18);
     addKerbRun(0.805, 0.845, -1, 5);
   }
@@ -330,57 +327,50 @@ async function main(): Promise<void> {
   const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
   if (!bridgeLayer) throw new Error('Missing #bridge-layer');
   bridgeLayer.replaceChildren();
-
   const plateauStart = bridgeTopDistance - BRIDGE_PLATEAU_HALF;
   const plateauEnd = bridgeTopDistance + BRIDGE_PLATEAU_HALF;
   const rampStart = plateauStart - BRIDGE_RAMP_LENGTH;
   const rampEnd = plateauEnd + BRIDGE_RAMP_LENGTH;
-
-  // Shadow and a faint full-length ramp surface make the elevation legible.
-  const bridgeShadow = sampledPath(0, rampStart, rampEnd, 190, 14);
-  const rampDeck = sampledPath(0, rampStart, rampEnd, 190);
-  const rampLeft = sampledPath(-ROAD_HALF_WIDTH, rampStart, rampEnd, 190);
-  const rampRight = sampledPath(ROAD_HALF_WIDTH, rampStart, rampEnd, 190);
-  bridgeLayer.appendChild(createBridgePath(bridgeShadow, '#00030a', 154, 0.24, 'bridge-shadow'));
-  bridgeLayer.appendChild(createBridgePath(rampDeck, '#162337', 146, 0.18, 'bridge-ramp-deck'));
-  bridgeLayer.appendChild(createBridgePath(rampLeft, '#34b8c5', 3, 0.48, 'bridge-ramp-edge'));
-  bridgeLayer.appendChild(createBridgePath(rampRight, '#b53aa8', 3, 0.42, 'bridge-ramp-edge'));
-
-  const bridgeCenter = sampledPath(0, plateauStart, plateauEnd, 100);
-  const bridgeLeft = sampledPath(-ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100);
-  const bridgeRight = sampledPath(ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100);
-  const bridgeLaneA = sampledPath(-LANE_OFFSET, plateauStart, plateauEnd, 100);
-  const bridgeLaneB = sampledPath(LANE_OFFSET, plateauStart, plateauEnd, 100);
-
-  // Plateau is roughly 15% more opaque than the previous prototype.
-  bridgeLayer.appendChild(createBridgePath(bridgeCenter, '#111d2e', 144, 0.50, 'bridge-deck'));
-  bridgeLayer.appendChild(createBridgePath(bridgeLeft, '#4cf4ff', 3.5, 0.92, 'bridge-edge'));
-  bridgeLayer.appendChild(createBridgePath(bridgeRight, '#ff54e7', 3.5, 0.82, 'bridge-edge'));
-  bridgeLayer.appendChild(createBridgePath(bridgeLaneA, '#b9fdff', 2.7, 1, 'bridge-rail'));
-  bridgeLayer.appendChild(createBridgePath(bridgeLaneB, '#ff9bf3', 2.7, 0.96, 'bridge-rail'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(0, rampStart, rampEnd, 190, 14), '#00030a', 154, 0.24, 'bridge-shadow'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(0, rampStart, rampEnd, 190), '#162337', 146, 0.18, 'bridge-ramp-deck'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(-ROAD_HALF_WIDTH, rampStart, rampEnd, 190), '#34b8c5', 3, 0.48, 'bridge-ramp-edge'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(ROAD_HALF_WIDTH, rampStart, rampEnd, 190), '#b53aa8', 3, 0.42, 'bridge-ramp-edge'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(0, plateauStart, plateauEnd, 100), '#111d2e', 144, 0.50, 'bridge-deck'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(-ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100), '#4cf4ff', 3.5, 0.92, 'bridge-edge'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(ROAD_HALF_WIDTH, plateauStart, plateauEnd, 100), '#ff54e7', 3.5, 0.82, 'bridge-edge'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(-LANE_OFFSET, plateauStart, plateauEnd, 100), '#b9fdff', 2.7, 1, 'bridge-rail'));
+  bridgeLayer.appendChild(createBridgePath(sampledPath(LANE_OFFSET, plateauStart, plateauEnd, 100), '#ff9bf3', 2.7, 0.96, 'bridge-rail'));
 
   const bridgeEnterAt = bridgeTopDistance - BRIDGE_PLATEAU_HALF - BRIDGE_RAMP_LENGTH - BRIDGE_ENTRY_LEAD;
   const bridgeExitAt = bridgeTopDistance + BRIDGE_PLATEAU_HALF + BRIDGE_RAMP_LENGTH + MAX_TRAIL_LENGTH;
 
-  setBoot('CACHE READY\nINITIALIZING PIXI LAYERS...');
+  setBoot('CACHE READY\nINITIALIZING TWO-PLAYER PIXI LAYERS...');
   const underApp = await createLayer('pixi-under');
   const overApp = await createLayer('pixi-over');
   const uiApp = await createLayer('pixi-ui');
 
-  const underVisual = createPhotonVisual();
-  const overVisual = createPhotonVisual();
-  underApp.stage.addChild(underVisual.trail, underVisual.root);
-  overApp.stage.addChild(overVisual.trail, overVisual.root);
+  const makePlayer = (id: 1 | 2, name: string, color: number, laneOffset: number, distance: number): Player => {
+    const underVisual = createPhotonVisual();
+    const overVisual = createPhotonVisual();
+    underApp.stage.addChild(underVisual.trail, underVisual.root);
+    overApp.stage.addChild(overVisual.trail, overVisual.root);
+    return { id, name, color, laneOffset, distance, speed: 0, throttle: false, currentZ: 1, underVisual, overVisual };
+  };
+
+  const players: Player[] = [
+    makePlayer(1, 'LEFT', 0x27e7ff, -LANE_OFFSET, 90),
+    makePlayer(2, 'RIGHT', 0xb76cff, LANE_OFFSET, 35),
+  ];
 
   const hud = new Text({
     text: '',
-    style: new TextStyle({ fill: '#dffcff', fontSize: 17, fontFamily: 'monospace', lineHeight: 23 }),
+    style: new TextStyle({ fill: '#dffcff', fontSize: 16, fontFamily: 'monospace', lineHeight: 22 }),
   });
   hud.position.set(26, 24);
   uiApp.stage.addChild(hud);
 
   const note = new Text({
-    text: 'HOLD SCREEN / SPACE  //  PRECACHED ISO TRACK',
+    text: 'LEFT HALF = CYAN   //   RIGHT HALF = VIOLET   //   A/D OR ←/→',
     style: new TextStyle({ fill: '#72e9f7', fontSize: 13, fontFamily: 'Arial' }),
   });
   note.position.set(26, HEIGHT - 38);
@@ -388,73 +378,88 @@ async function main(): Promise<void> {
 
   boot?.remove();
 
-  let distance = 90;
-  let speed = 0;
-  let throttle = false;
-  let currentZ: 1 | 3 = 1;
-  let frames = 0;
-  let elapsed = 0;
-  let fps = 0;
-  let maxFrame = 0;
-  let maxWindow = 0;
-  let lap = 1;
-  let previousDistance = distance;
-  let lapStart = performance.now();
-  let lastLap = 0;
-  let bestLap = Number.POSITIVE_INFINITY;
-  let lastTime = performance.now();
+  const keyState = { left: false, right: false };
+  const leftPointers = new Set<number>();
+  const rightPointers = new Set<number>();
 
-  const setThrottle = (value: boolean): void => { throttle = value; };
-  window.addEventListener('keydown', (event) => { if (event.code === 'Space') setThrottle(true); });
-  window.addEventListener('keyup', (event) => { if (event.code === 'Space') setThrottle(false); });
+  const refreshThrottle = (): void => {
+    players[0].throttle = keyState.left || leftPointers.size > 0;
+    players[1].throttle = keyState.right || rightPointers.size > 0;
+  };
+
+  window.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyA' || event.code === 'ArrowLeft') keyState.left = true;
+    if (event.code === 'KeyD' || event.code === 'ArrowRight') keyState.right = true;
+    refreshThrottle();
+  });
+  window.addEventListener('keyup', (event) => {
+    if (event.code === 'KeyA' || event.code === 'ArrowLeft') keyState.left = false;
+    if (event.code === 'KeyD' || event.code === 'ArrowRight') keyState.right = false;
+    refreshThrottle();
+  });
+
   const uiCanvas = uiApp.canvas;
   uiCanvas.style.touchAction = 'none';
-  uiCanvas.addEventListener('pointerdown', () => setThrottle(true));
-  window.addEventListener('pointerup', () => setThrottle(false));
-  window.addEventListener('pointercancel', () => setThrottle(false));
+  uiCanvas.addEventListener('pointerdown', (event) => {
+    uiCanvas.setPointerCapture?.(event.pointerId);
+    const rect = uiCanvas.getBoundingClientRect();
+    const localX = event.clientX - rect.left;
+    if (localX < rect.width / 2) leftPointers.add(event.pointerId);
+    else rightPointers.add(event.pointerId);
+    refreshThrottle();
+  });
+  const releasePointer = (event: PointerEvent): void => {
+    leftPointers.delete(event.pointerId);
+    rightPointers.delete(event.pointerId);
+    refreshThrottle();
+  };
+  window.addEventListener('pointerup', releasePointer);
+  window.addEventListener('pointercancel', releasePointer);
 
-  const renderVisual = (visual: PhotonVisual, p: TrackPoint, ratio: number, active: boolean): void => {
+  const renderVisual = (player: Player, visual: PhotonVisual, p: TrackPoint, ratio: number, active: boolean): void => {
     visual.root.visible = active;
     visual.trail.visible = active;
     if (!active) return;
     visual.root.position.set(p.x, p.y);
     visual.root.rotation = p.angle;
     visual.root.alpha = p.underBridge ? 0.45 : 1;
-    rebuildPhoton(visual, ratio);
+    rebuildPhoton(visual, ratio, player.color);
     visual.trail.clear();
     if (ratio <= 0.02) return;
     const wakeLength = (40 + ratio * 520) * TRAIL_SCALE;
     const points: TrackPoint[] = [];
-    for (let i = 30; i >= 0; i -= 1) points.push(sample(distance - wakeLength * (i / 30)));
+    for (let i = 24; i >= 0; i -= 1) {
+      points.push(sample(player.distance - wakeLength * (i / 24), player.laneOffset));
+    }
     const alphaScale = p.underBridge ? 0.38 : 1;
-    drawOpenPath(visual.trail, points, 34 + ratio * 15, PHOTON.baseColor, (0.08 + ratio * 0.04) * alphaScale);
-    drawOpenPath(visual.trail, points, 14 + ratio * 9, PHOTON.baseColor, (0.20 + ratio * 0.12) * alphaScale);
-    drawOpenPath(visual.trail, points, 4 + ratio * 4, 0xe9ffff, (0.70 + ratio * 0.24) * alphaScale);
+    drawOpenPath(visual.trail, points, 28 + ratio * 12, player.color, (0.07 + ratio * 0.04) * alphaScale);
+    drawOpenPath(visual.trail, points, 11 + ratio * 7, player.color, (0.18 + ratio * 0.11) * alphaScale);
+    drawOpenPath(visual.trail, points, 3 + ratio * 3, 0xe9ffff, (0.64 + ratio * 0.22) * alphaScale);
   };
+
+  let frames = 0;
+  let elapsed = 0;
+  let fps = 0;
+  let maxFrame = 0;
+  let maxWindow = 0;
+  let lastTime = performance.now();
 
   const tick = (now: number): void => {
     const deltaMs = Math.min(now - lastTime, 40);
     lastTime = now;
     const dt = deltaMs / 1000;
 
-    speed += (throttle ? PHYSICS.acceleration : -PHYSICS.coastDrag) * dt;
-    speed = Math.max(0, Math.min(PHYSICS.maxSpeed, speed));
-    previousDistance = distance;
-    distance = wrap(distance + speed * dt);
-
-    if (speed > 50 && distance < previousDistance) {
-      lastLap = now - lapStart;
-      bestLap = Math.min(bestLap, lastLap);
-      lapStart = now;
-      lap += 1;
+    for (const player of players) {
+      player.speed += (player.throttle ? PHYSICS.acceleration : -PHYSICS.coastDrag) * dt;
+      player.speed = Math.max(0, Math.min(PHYSICS.maxSpeed, player.speed));
+      player.distance = wrap(player.distance + player.speed * dt);
+      player.currentZ = player.distance >= bridgeEnterAt && player.distance <= bridgeExitAt ? 3 : 1;
+      const p = sample(player.distance, player.laneOffset);
+      const ratio = clamp01(player.speed / PHYSICS.maxSpeed);
+      renderVisual(player, player.underVisual, p, ratio, player.currentZ === 1);
+      renderVisual(player, player.overVisual, p, ratio, player.currentZ === 3);
     }
 
-    const p = sample(distance);
-    currentZ = distance >= bridgeEnterAt && distance <= bridgeExitAt ? 3 : 1;
-
-    const ratio = clamp01(speed / PHYSICS.maxSpeed);
-    renderVisual(underVisual, p, ratio, currentZ === 1);
-    renderVisual(overVisual, p, ratio, currentZ === 3);
     underApp.renderer.render(underApp.stage);
     overApp.renderer.render(overApp.stage);
 
@@ -472,10 +477,9 @@ async function main(): Promise<void> {
       maxFrame = deltaMs;
     }
 
-    const currentLap = (now - lapStart) / 1000;
-    const lastText = lastLap > 0 ? (lastLap / 1000).toFixed(3) : '--.---';
-    const bestText = Number.isFinite(bestLap) ? (bestLap / 1000).toFixed(3) : '--.---';
-    hud.text = `PIXIJS // ISO SVG 8 CACHE\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nLAP ${lap}   ${currentLap.toFixed(3)}   LAST ${lastText}   BEST ${bestText}\nSPEED ${Math.round(speed * 0.82)}   Z${currentZ}   HEIGHT ${p.elevation.toFixed(0)}   ${p.underBridge ? 'UNDER' : p.layer === 1 ? 'OVER' : ''}`;
+    const p1 = sample(players[0].distance, players[0].laneOffset);
+    const p2 = sample(players[1].distance, players[1].laneOffset);
+    hud.text = `PIXIJS // 2 PHOTONS\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nCYAN   ${Math.round(players[0].speed * 0.82)}   Z${players[0].currentZ} H${p1.elevation.toFixed(0)} ${players[0].throttle ? 'THRUST' : 'COAST'}\nVIOLET ${Math.round(players[1].speed * 0.82)}   Z${players[1].currentZ} H${p2.elevation.toFixed(0)} ${players[1].throttle ? 'THRUST' : 'COAST'}`;
     uiApp.renderer.render(uiApp.stage);
     requestAnimationFrame(tick);
   };
