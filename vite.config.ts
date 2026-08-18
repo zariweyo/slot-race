@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -8,8 +7,8 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
-        pixi: resolve(__dirname, 'pixi.html'),
+        main: 'index.html',
+        pixi: 'pixi.html',
       },
     },
   },
