@@ -27,7 +27,8 @@ body {
 }
 
 .track-svg,
-.pixi-layer {
+.pixi-layer,
+.bridge-svg {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -41,6 +42,11 @@ body {
 
 .pixi-layer {
   z-index: 2;
+}
+
+.bridge-svg {
+  z-index: 3;
+  pointer-events: none;
 }
 
 .pixi-layer canvas {
@@ -70,7 +76,7 @@ body {
   fill: #dffcff;
   font: 700 34px Arial, sans-serif;
   letter-spacing: 4px;
-  opacity: .58;
+  opacity: .42;
   filter: url(#cyanGlow);
 }
 
@@ -78,12 +84,12 @@ body {
   fill: #7ceeff;
   font: 12px Arial, sans-serif;
   letter-spacing: 6px;
-  opacity: .5;
+  opacity: .45;
   filter: none;
 }
 
 .curve-chevron {
-  font: 900 23px Arial Black, Arial, sans-serif;
+  font: 900 21px Arial Black, Arial, sans-serif;
   dominant-baseline: middle;
   text-anchor: middle;
   opacity: .12;
@@ -102,6 +108,18 @@ body {
 
 .energy-node {
   animation: nodePulse 1.8s ease-in-out infinite;
+}
+
+.bridge-shadow {
+  opacity: .74;
+}
+
+.bridge-deck {
+  opacity: .80;
+}
+
+.bridge-rail {
+  opacity: .95;
 }
 
 @keyframes chevronPulse {
