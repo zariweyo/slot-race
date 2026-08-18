@@ -18,17 +18,39 @@ const PHYSICS = {
   maxSpeed: 920,
 };
 
-const app = new Application();
-await app.init({
-  width: WIDTH,
-  height: HEIGHT,
-  background: '#03050c',
-  antialias: true,
-  resolution: Math.min(window.devicePixelRatio || 1, 2),
-  autoDensity: true,
-});
+const boot = document.querySelector<HTMLDivElement>('#pixi-boot');
 
-document.querySelector('#app')?.appendChild(app.canvas);
+function showBootError(error: unknown): never {
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  if (boot) {
+    boot.textContent = `PIXI STARTUP ERROR\n\n${message}`;
+    boot.style.color = '#ff6b9d';
+  }
+  console.error('Pixi startup failed:', error);
+  throw error;
+}
+
+const app = new Application();
+
+try {
+  await app.init({
+    width: WIDTH,
+    height: HEIGHT,
+    background: '#03050c',
+    antialias: true,
+    resolution: 1,
+    autoDensity: true,
+    preference: 'webgl',
+  });
+} catch (error) {
+  showBootError(error);
+}
+
+const host = document.querySelector<HTMLDivElement>('#app');
+if (!host) showBootError(new Error('Missing #app container'));
+
+boot?.remove();
+host.appendChild(app.canvas);
 app.canvas.style.width = '100%';
 app.canvas.style.height = '100%';
 app.canvas.style.objectFit = 'contain';
