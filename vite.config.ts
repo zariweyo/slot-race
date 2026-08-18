@@ -10,6 +10,11 @@ export default defineConfig({
         main: 'index.html',
         pixi: 'pixi.html',
       },
+      output: {
+        manualChunks: {
+          pixijs: ['pixi.js'],
+        },
+      },
     },
   },
 });
