@@ -6,10 +6,11 @@ const HEIGHT = 720;
 const LANE_OFFSET = 22;
 const PATH_SAMPLES = 1200;
 const BRIDGE_HALF_SPAN = 76;
+const ROAD_HALF_WIDTH = 73;
 
 const PHYSICS = {
   acceleration: 760,
-  coastDrag: 110,
+  coastDrag: 260,
   maxSpeed: 2350,
 };
 
@@ -19,7 +20,6 @@ const PHOTON = {
 };
 
 type Point = { x: number; y: number };
-
 type TrackPoint = Point & {
   angle: number;
   distance: number;
@@ -83,9 +83,7 @@ function sampledOffsetPath(source: SVGPathElement, offset: number): string {
     const nx = -dy / mag;
     const ny = dx / mag;
     const p = source.getPointAtLength(at);
-    const x = p.x + nx * offset;
-    const y = p.y + ny * offset;
-    d += `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)} `;
+    d += `${i === 0 ? 'M' : 'L'}${(p.x + nx * offset).toFixed(2)},${(p.y + ny * offset).toFixed(2)} `;
   }
   return d;
 }
@@ -120,6 +118,25 @@ function pathSegment(path: SVGPathElement, center: number, halfSpan: number, sam
   return d;
 }
 
+function offsetSegment(source: SVGPathElement, center: number, halfSpan: number, offset: number, samples = 70): string {
+  const total = source.getTotalLength();
+  let d = '';
+  for (let i = 0; i <= samples; i += 1) {
+    const at = center - halfSpan + ((halfSpan * 2) * i) / samples;
+    const wrapped = ((at % total) + total) % total;
+    const before = source.getPointAtLength(((wrapped - 1.5) + total) % total);
+    const after = source.getPointAtLength((wrapped + 1.5) % total);
+    const dx = after.x - before.x;
+    const dy = after.y - before.y;
+    const mag = Math.hypot(dx, dy) || 1;
+    const nx = -dy / mag;
+    const ny = dx / mag;
+    const p = source.getPointAtLength(wrapped);
+    d += `${i === 0 ? 'M' : 'L'}${(p.x + nx * offset).toFixed(2)},${(p.y + ny * offset).toFixed(2)} `;
+  }
+  return d;
+}
+
 function drawOpenPath(graphics: Graphics, points: Point[], width: number, color: number, alpha: number): void {
   if (points.length < 2) return;
   graphics.moveTo(points[0].x, points[0].y);
@@ -144,11 +161,10 @@ async function main(): Promise<void> {
   setPath('lane-a-dark', laneAD);
   setPath('lane-b-dark', laneBD);
   const laneA = setPath('lane-a', laneAD);
-  setPath('lane-b', laneBD);
+  const laneB = setPath('lane-b', laneBD);
 
   const totalLength = laneA.getTotalLength();
   const wrap = (distance: number): number => ((distance % totalLength) + totalLength) % totalLength;
-
   const bridgeTopDistance = totalLength * 0.5;
   const bridgeUnderDistance = 0;
 
@@ -158,13 +174,12 @@ async function main(): Promise<void> {
     const p = laneA.getPointAtLength(d);
     const before = laneA.getPointAtLength(wrap(d - epsilon));
     const after = laneA.getPointAtLength(wrap(d + epsilon));
-    const angle = Math.atan2(after.y - before.y, after.x - before.x);
     const onTop = circularDelta(d, bridgeTopDistance, totalLength) <= BRIDGE_HALF_SPAN;
     const under = circularDelta(d, bridgeUnderDistance, totalLength) <= BRIDGE_HALF_SPAN;
     return {
       x: p.x,
       y: p.y,
-      angle,
+      angle: Math.atan2(after.y - before.y, after.x - before.x),
       distance: d,
       layer: onTop ? 1 : 0,
       underBridge: under,
@@ -175,8 +190,7 @@ async function main(): Promise<void> {
   if (arrows) {
     arrows.replaceChildren();
     const ns = 'http://www.w3.org/2000/svg';
-    const groups = [0.10, 0.29, 0.60, 0.79];
-    groups.forEach((fraction, groupIndex) => {
+    [0.10, 0.29, 0.60, 0.79].forEach((fraction, groupIndex) => {
       for (let i = 0; i < 5; i += 1) {
         const p = sample((fraction + i * 0.012) * totalLength);
         const text = document.createElementNS(ns, 'text');
@@ -209,23 +223,31 @@ async function main(): Promise<void> {
     }
   }
 
+  const bridgeSvg = document.querySelector<SVGSVGElement>('#bridge-svg');
   const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
-  if (!bridgeLayer) throw new Error('Missing #bridge-layer');
+  if (!bridgeSvg || !bridgeLayer) throw new Error('Missing bridge overlay');
   bridgeLayer.replaceChildren();
 
   const sourceLength = source.getTotalLength();
   const sourceBridgeCenter = sourceLength * 0.5;
   const centerBridge = pathSegment(source, sourceBridgeCenter, BRIDGE_HALF_SPAN, 80);
+  const leftShoulder = offsetSegment(source, sourceBridgeCenter, BRIDGE_HALF_SPAN, -ROAD_HALF_WIDTH, 80);
+  const rightShoulder = offsetSegment(source, sourceBridgeCenter, BRIDGE_HALF_SPAN, ROAD_HALF_WIDTH, 80);
   const laneABridge = pathSegment(laneA, bridgeTopDistance, BRIDGE_HALF_SPAN, 80);
-  const laneB = document.querySelector<SVGPathElement>('#lane-b');
-  if (!laneB) throw new Error('Missing #lane-b');
   const laneBBridge = pathSegment(laneB, laneB.getTotalLength() * 0.5, BRIDGE_HALF_SPAN, 80);
 
-  bridgeLayer.appendChild(createBridgePath(centerBridge, '#00030a', 174, 0.34));
-  bridgeLayer.appendChild(createBridgePath(centerBridge, '#203653', 162, 0.74));
-  bridgeLayer.appendChild(createBridgePath(centerBridge, '#0d1625', 146, 0.72));
-  bridgeLayer.appendChild(createBridgePath(laneABridge, '#9ffcff', 2.2, 0.92));
-  bridgeLayer.appendChild(createBridgePath(laneBBridge, '#ff8af1', 2.2, 0.84));
+  // Transparent deck: enough to read the upper road while still seeing the road below.
+  bridgeLayer.appendChild(createBridgePath(centerBridge, '#0d1625', 144, 0.36, 'bridge-deck'));
+  // Only the two outer shoulders get strong borders; there are no border caps across the road.
+  bridgeLayer.appendChild(createBridgePath(leftShoulder, '#4cf4ff', 3.5, 0.84, 'bridge-edge'));
+  bridgeLayer.appendChild(createBridgePath(rightShoulder, '#ff54e7', 3.5, 0.72, 'bridge-edge'));
+  // Upper rails stay crisp.
+  bridgeLayer.appendChild(createBridgePath(laneABridge, '#b9fdff', 2.6, 1, 'bridge-rail'));
+  bridgeLayer.appendChild(createBridgePath(laneBBridge, '#ff9bf3', 2.6, 0.95, 'bridge-rail'));
+
+  // Fade the lower crossing rails locally by covering them with a translucent road-colored strip.
+  const underFade = createBridgePath(centerBridge, '#0a111d', 34, 0.30, 'under-rail-fade');
+  bridgeLayer.insertBefore(underFade, bridgeLayer.firstChild);
 
   const app = new Application();
   setBoot('SVG READY\nINITIALIZING PIXI 1280x720...');
@@ -262,7 +284,6 @@ async function main(): Promise<void> {
     const heat = clamp01((ratio - 0.58) / 0.42);
     const bodyColor = mixColor(PHOTON.baseColor, 0xff7a36, heat * 0.42);
     const tipColor = mixColor(PHOTON.baseColor, PHOTON.limitColor, heat);
-
     glow.clear().ellipse(-5, 0, 58, 26).fill({ color: tipColor, alpha: 0.12 + ratio * 0.10 });
     body.clear().poly([
       42, 0, 24, -7, 6, -11, -13, -10, -29, -5, -38, 0,
@@ -301,6 +322,7 @@ async function main(): Promise<void> {
   let lapStart = performance.now();
   let lastLap = 0;
   let bestLap = Number.POSITIVE_INFINITY;
+  let lastBridgeLayer: 0 | 1 | -1 = -1;
 
   window.addEventListener('keydown', (event) => { if (event.code === 'Space') throttle = true; });
   window.addEventListener('keyup', (event) => { if (event.code === 'Space') throttle = false; });
@@ -326,7 +348,15 @@ async function main(): Promise<void> {
     const p = sample(distance);
     photon.position.set(p.x, p.y);
     photon.rotation = p.angle;
-    photon.alpha = p.underBridge ? 0.42 : 1;
+    photon.alpha = p.underBridge ? 0.45 : 1;
+
+    // The DOM bridge must be below Pixi on the upper pass and above Pixi on the lower pass.
+    const desiredLayer: 0 | 1 = p.layer === 1 ? 0 : 1;
+    if (desiredLayer !== lastBridgeLayer) {
+      bridgeSvg.style.zIndex = desiredLayer === 0 ? '2' : '3';
+      host.style.zIndex = desiredLayer === 0 ? '3' : '2';
+      lastBridgeLayer = desiredLayer;
+    }
 
     const ratio = clamp01(speed / PHYSICS.maxSpeed);
     rebuildPhoton(ratio);
@@ -336,9 +366,7 @@ async function main(): Promise<void> {
       const wakeLength = 40 + ratio * 520;
       const segments = 30;
       const points: TrackPoint[] = [];
-      for (let i = segments; i >= 0; i -= 1) {
-        points.push(sample(distance - wakeLength * (i / segments)));
-      }
+      for (let i = segments; i >= 0; i -= 1) points.push(sample(distance - wakeLength * (i / segments)));
       const alphaScale = p.underBridge ? 0.38 : 1;
       drawOpenPath(trail, points, 34 + ratio * 15, PHOTON.baseColor, (0.08 + ratio * 0.04) * alphaScale);
       drawOpenPath(trail, points, 14 + ratio * 9, PHOTON.baseColor, (0.20 + ratio * 0.12) * alphaScale);
