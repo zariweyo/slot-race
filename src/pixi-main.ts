@@ -23,7 +23,6 @@ const PHYSICS = {
   maxSpeed: 2350,
 };
 
-const LIMIT_COLOR = 0xff2638;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 type Point = { x: number; y: number };
@@ -51,8 +50,6 @@ type PhotonVisual = {
   root: Container;
   trail: Graphics;
   glow: Graphics;
-  body: Graphics;
-  tip: Graphics;
 };
 
 type Player = {
@@ -91,17 +88,10 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function mixColor(from: number, to: number, amount: number): number {
-  const t = clamp01(amount);
-  const fr = (from >> 16) & 0xff;
-  const fg = (from >> 8) & 0xff;
-  const fb = from & 0xff;
-  const tr = (to >> 16) & 0xff;
-  const tg = (to >> 8) & 0xff;
-  const tb = to & 0xff;
-  const r = Math.round(fr + (tr - fr) * t);
-  const g = Math.round(fg + (tg - fg) * t);
-  const b = Math.round(fb + (tb - fb) * t);
+function scaleColor(color: number, factor: number): number {
+  const r = Math.max(0, Math.min(255, Math.round(((color >> 16) & 0xff) * factor)));
+  const g = Math.max(0, Math.min(255, Math.round(((color >> 8) & 0xff) * factor)));
+  const b = Math.max(0, Math.min(255, Math.round((color & 0xff) * factor)));
   return (r << 16) | (g << 8) | b;
 }
 
@@ -130,24 +120,46 @@ function drawOpenPath(graphics: Graphics, points: Point[], width: number, color:
   graphics.stroke({ width, color, alpha });
 }
 
-function createPhotonVisual(): PhotonVisual {
+function cubeFace(points: Point[], color: number, edgeColor: number, edgeAlpha: number): Graphics {
+  const face = new Graphics();
+  face.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) face.lineTo(points[i].x, points[i].y);
+  face.lineTo(points[0].x, points[0].y);
+  face.fill({ color, alpha: 0.98 });
+  face.stroke({ width: 1.4, color: edgeColor, alpha: edgeAlpha });
+  return face;
+}
+
+function createPhotonVisual(baseColor: number): PhotonVisual {
   const root = new Container();
   const trail = new Graphics();
   const glow = new Graphics();
-  const body = new Graphics();
-  const tip = new Graphics();
-  root.addChild(glow, body, tip);
-  return { root, trail, glow, body, tip };
-}
 
-function rebuildPhoton(visual: PhotonVisual, ratio: number, baseColor: number): void {
-  const heat = clamp01((ratio - 0.58) / 0.42);
-  const bodyColor = mixColor(baseColor, 0xff7a36, heat * 0.40);
-  const tipColor = mixColor(baseColor, LIMIT_COLOR, heat);
-  visual.glow.clear().ellipse(-2, 0, 40, 20).fill({ color: tipColor, alpha: 0.12 + ratio * 0.10 });
-  visual.body.clear().ellipse(-3, 0, 25, 11).fill({ color: bodyColor, alpha: 0.98 });
-  visual.body.ellipse(2, 0, 15, 6).fill({ color: 0xffffff, alpha: 0.72 });
-  visual.tip.clear().circle(18, 0, 5.5).fill({ color: tipColor, alpha: 1 });
+  // A true 3D engine is unnecessary for this experiment. These three faces are
+  // built once and then only the container transform changes at runtime.
+  glow.ellipse(0, 15, 31, 12).fill({ color: baseColor, alpha: 0.16 });
+
+  const top = cubeFace(
+    [{ x: 0, y: -22 }, { x: 20, y: -12 }, { x: 0, y: -2 }, { x: -20, y: -12 }],
+    scaleColor(baseColor, 1.22),
+    0xffffff,
+    0.72,
+  );
+  const left = cubeFace(
+    [{ x: -20, y: -12 }, { x: 0, y: -2 }, { x: 0, y: 20 }, { x: -20, y: 10 }],
+    scaleColor(baseColor, 0.72),
+    0xffffff,
+    0.42,
+  );
+  const right = cubeFace(
+    [{ x: 0, y: -2 }, { x: 20, y: -12 }, { x: 20, y: 10 }, { x: 0, y: 20 }],
+    scaleColor(baseColor, 0.48),
+    0xffffff,
+    0.32,
+  );
+
+  root.addChild(glow, left, right, top);
+  return { root, trail, glow };
 }
 
 async function createPixiApp(host: HTMLElement): Promise<Application> {
@@ -445,7 +457,7 @@ async function main(): Promise<void> {
   const makePlayer = (id: 1 | 2, color: number, offset: number, distance: number): Player => {
     const visuals = new Map<number, PhotonVisual>();
     for (const renderer of levelRenderers) {
-      const visual = createPhotonVisual();
+      const visual = createPhotonVisual(color);
       renderer.app.stage.addChild(visual.trail, visual.root);
       visuals.set(renderer.level, visual);
     }
@@ -538,9 +550,15 @@ async function main(): Promise<void> {
       visual.root.visible = active;
       visual.trail.visible = active;
       if (!active) continue;
-      visual.root.position.set(p.x, p.y);
-      visual.root.rotation = p.angle;
-      rebuildPhoton(visual, ratio, player.color);
+
+      visual.root.position.set(p.x, p.y - 8);
+      // Keep the cube vertical in screen space. Rotating the whole 2D projection
+      // with the road tangent would visually tip the cube over in corners.
+      visual.root.rotation = 0;
+      const scale = 0.80 + ratio * 0.08;
+      visual.root.scale.set(scale);
+      visual.glow.alpha = 0.72 + ratio * 0.28;
+
       visual.trail.clear();
       if (ratio <= 0.02) continue;
       const wakeLength = (40 + ratio * 520) * TRAIL_SCALE;
