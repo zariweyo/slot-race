@@ -14,7 +14,6 @@ const WIDTH = 1280;
 const HEIGHT = 720;
 const CACHE_SAMPLES = 4096;
 const SVG_SAMPLES = 1600;
-const TRAIL_SCALE = 0.70;
 const DEG = Math.PI / 180;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -194,16 +193,7 @@ function drawCube3d(visual: CubeVisual, baseColor: number, yaw: number, pitch: n
 
 async function createPixiApp(host: HTMLElement): Promise<Application> {
   const app = new Application();
-  await app.init({
-    width: WIDTH,
-    height: HEIGHT,
-    backgroundAlpha: 0,
-    antialias: true,
-    resolution: 1,
-    autoDensity: false,
-    preference: 'webgl',
-    autoStart: false,
-  });
+  await app.init({ width: WIDTH, height: HEIGHT, backgroundAlpha: 0, antialias: true, resolution: 1, autoDensity: false, preference: 'webgl', autoStart: false });
   host.appendChild(app.canvas);
   app.canvas.width = WIDTH;
   app.canvas.height = HEIGHT;
@@ -228,39 +218,17 @@ function worldAt(compiled: CompiledTrack, distance: number): WorldPoint {
   const span = Math.max(1e-6, b.distance - a.distance);
   const t = clamp01((d - a.distance) / span);
   const nearest = t < 0.5 ? a : b;
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t,
-    distance: d,
-    segmentIndex: nearest.segmentIndex,
-    segmentType: nearest.segmentType,
-    curveSign: nearest.curveSign,
-    level: nearest.level,
-    elevation: a.elevation + (b.elevation - a.elevation) * t,
-    renderLevel: nearest.renderLevel,
-    rampDirection: nearest.rampDirection,
-  };
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, distance: d, segmentIndex: nearest.segmentIndex, segmentType: nearest.segmentType, curveSign: nearest.curveSign, level: nearest.level, elevation: a.elevation + (b.elevation - a.elevation) * t, renderLevel: nearest.renderLevel, rampDirection: nearest.rampDirection };
 }
 
 function svgPath(d: string, stroke: string, width: number, opacity: number, lineCap: 'butt' | 'round' = 'butt'): SVGPathElement {
   const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', d);
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', stroke);
-  path.setAttribute('stroke-width', String(width));
-  path.setAttribute('stroke-linecap', lineCap);
-  path.setAttribute('stroke-linejoin', 'round');
-  path.setAttribute('opacity', String(opacity));
+  path.setAttribute('d', d); path.setAttribute('fill', 'none'); path.setAttribute('stroke', stroke); path.setAttribute('stroke-width', String(width)); path.setAttribute('stroke-linecap', lineCap); path.setAttribute('stroke-linejoin', 'round'); path.setAttribute('opacity', String(opacity));
   return path;
 }
 
 function svgFill(d: string, fill: string, opacity: number): SVGPathElement {
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', d);
-  path.setAttribute('fill', fill);
-  path.setAttribute('fill-rule', 'evenodd');
-  path.setAttribute('opacity', String(opacity));
-  return path;
+  const path = document.createElementNS(SVG_NS, 'path'); path.setAttribute('d', d); path.setAttribute('fill', fill); path.setAttribute('fill-rule', 'evenodd'); path.setAttribute('opacity', String(opacity)); return path;
 }
 
 function neonKerb(d: string): SVGPathElement[] {
@@ -274,27 +242,17 @@ function neonKerb(d: string): SVGPathElement[] {
 
 async function main(): Promise<void> {
   setBoot('LOADING TRACK...');
-
   const definition = await loadInitialTrack(trackJson as TrackDefinition);
   const compiled = compileTrack(definition, 5);
   if (compiled.points.length < 4 || compiled.totalLength <= 0) throw new Error('Track compiler produced an empty track');
 
-  const bounds = compiled.points.reduce(
-    (acc, p) => ({
-      minX: Math.min(acc.minX, p.x), maxX: Math.max(acc.maxX, p.x),
-      minY: Math.min(acc.minY, p.y), maxY: Math.max(acc.maxY, p.y),
-    }),
-    { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
-  );
+  const bounds = compiled.points.reduce((acc, p) => ({ minX: Math.min(acc.minX, p.x), maxX: Math.max(acc.maxX, p.x), minY: Math.min(acc.minY, p.y), maxY: Math.max(acc.maxY, p.y) }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
   const worldWidth = Math.max(1, bounds.maxX - bounds.minX);
   const worldHeight = Math.max(1, bounds.maxY - bounds.minY);
   const fitScale = Math.min(980 / worldWidth, 560 / worldHeight);
   const worldCenterX = (bounds.minX + bounds.maxX) / 2;
   const worldCenterY = (bounds.minY + bounds.maxY) / 2;
-  const toCanvasWorld = (x: number, y: number): Point => ({
-    x: 640 + (x - worldCenterX) * fitScale,
-    y: 370 + (y - worldCenterY) * fitScale,
-  });
+  const toCanvasWorld = (x: number, y: number): Point => ({ x: 640 + (x - worldCenterX) * fitScale, y: 370 + (y - worldCenterY) * fitScale });
 
   const totalLength = compiled.totalLength;
   const speedMultiplier = definition.speedMultiplier ?? 1;
@@ -304,21 +262,7 @@ async function main(): Promise<void> {
   const autoCloseSegmentIndex = definition.segments.length;
   const autoCloseRange = compiled.segments.find((segment) => segment.segmentIndex === autoCloseSegmentIndex);
 
-  const rawWorld: Array<{
-    worldX: number;
-    worldY: number;
-    elevation: number;
-    distance: number;
-    x: number;
-    y: number;
-    level: number;
-    renderLevel: number;
-    segmentIndex: number;
-    segmentType: WorldPoint['segmentType'];
-    curveSign: -1 | 0 | 1;
-    curvature: number;
-  }> = [];
-
+  const rawWorld: Array<{ worldX: number; worldY: number; elevation: number; distance: number; x: number; y: number; level: number; renderLevel: number; segmentIndex: number; segmentType: WorldPoint['segmentType']; curveSign: -1 | 0 | 1; curvature: number }> = [];
   for (let i = 0; i < CACHE_SAMPLES; i += 1) {
     const distance = (i / CACHE_SAMPLES) * totalLength;
     const original = worldAt(compiled, distance);
@@ -326,397 +270,110 @@ async function main(): Promise<void> {
     const projected = projectIso(fitted.x, fitted.y, original.elevation);
     const segment = definition.segments[original.segmentIndex];
     const curvature = segment?.type === 'curve' ? (segment.angle * DEG) / segment.length : 0;
-    rawWorld.push({
-      worldX: fitted.x,
-      worldY: fitted.y,
-      elevation: original.elevation,
-      distance,
-      x: projected.x,
-      y: projected.y,
-      level: original.level,
-      renderLevel: original.renderLevel,
-      segmentIndex: original.segmentIndex,
-      segmentType: original.segmentType,
-      curveSign: original.curveSign,
-      curvature,
-    });
+    rawWorld.push({ worldX: fitted.x, worldY: fitted.y, elevation: original.elevation, distance, x: projected.x, y: projected.y, level: original.level, renderLevel: original.renderLevel, segmentIndex: original.segmentIndex, segmentType: original.segmentType, curveSign: original.curveSign, curvature });
   }
 
-  let closeNx = 0;
-  let closeNy = 0;
+  let closeNx = 0; let closeNy = 0;
   if (autoCloseRange) {
-    const closeStart = worldAt(compiled, autoCloseRange.start);
-    const closeEnd = worldAt(compiled, autoCloseRange.end - 0.001);
-    const startWorld = toCanvasWorld(closeStart.x, closeStart.y);
-    const endWorld = toCanvasWorld(closeEnd.x, closeEnd.y);
-    const closeDx = endWorld.x - startWorld.x;
-    const closeDy = endWorld.y - startWorld.y;
-    const closeMag = Math.hypot(closeDx, closeDy) || 1;
-    closeNx = -closeDy / closeMag;
-    closeNy = closeDx / closeMag;
+    const closeStart = worldAt(compiled, autoCloseRange.start); const closeEnd = worldAt(compiled, autoCloseRange.end - 0.001);
+    const startWorld = toCanvasWorld(closeStart.x, closeStart.y); const endWorld = toCanvasWorld(closeEnd.x, closeEnd.y);
+    const closeDx = endWorld.x - startWorld.x; const closeDy = endWorld.y - startWorld.y; const closeMag = Math.hypot(closeDx, closeDy) || 1;
+    closeNx = -closeDy / closeMag; closeNy = closeDx / closeMag;
   }
 
   const cache: CachePoint[] = rawWorld.map((p, i) => {
-    const before = rawWorld[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES];
-    const after = rawWorld[(i + 1) % CACHE_SAMPLES];
-    const worldDx = after.worldX - before.worldX;
-    const worldDy = after.worldY - before.worldY;
-    const worldMag = Math.hypot(worldDx, worldDy) || 1;
+    const before = rawWorld[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES]; const after = rawWorld[(i + 1) % CACHE_SAMPLES];
+    const worldDx = after.worldX - before.worldX; const worldDy = after.worldY - before.worldY; const worldMag = Math.hypot(worldDx, worldDy) || 1;
     const onAutoClose = autoCloseRange && p.distance >= autoCloseRange.start && p.distance <= autoCloseRange.end;
-    const worldNx = onAutoClose ? closeNx : -worldDy / worldMag;
-    const worldNy = onAutoClose ? closeNy : worldDx / worldMag;
-    const screenDx = after.x - before.x;
-    const screenDy = after.y - before.y;
+    const worldNx = onAutoClose ? closeNx : -worldDy / worldMag; const worldNy = onAutoClose ? closeNy : worldDx / worldMag;
+    const screenDx = after.x - before.x; const screenDy = after.y - before.y;
     return { ...p, worldNx, worldNy, angle: Math.atan2(screenDy, screenDx) };
   });
 
   const sample = (distance: number, offset = -laneOffset): TrackPoint => {
-    const d = wrap(distance);
-    const exact = (d / totalLength) * CACHE_SAMPLES;
-    const i0 = Math.floor(exact) % CACHE_SAMPLES;
-    const i1 = (i0 + 1) % CACHE_SAMPLES;
-    const t = exact - Math.floor(exact);
-    const a = cache[i0];
-    const b = cache[i1];
-    const nearest = t < 0.5 ? a : b;
-    const lerp = (x: number, y: number): number => x + (y - x) * t;
-    let angleDelta = b.angle - a.angle;
-    if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
-    if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
-    const centerWorldX = lerp(a.worldX, b.worldX);
-    const centerWorldY = lerp(a.worldY, b.worldY);
-    let worldNx = lerp(a.worldNx, b.worldNx);
-    let worldNy = lerp(a.worldNy, b.worldNy);
-    const normalMag = Math.hypot(worldNx, worldNy) || 1;
-    worldNx /= normalMag;
-    worldNy /= normalMag;
-    const worldX = centerWorldX + worldNx * offset;
-    const worldY = centerWorldY + worldNy * offset;
-    const elevation = lerp(a.elevation, b.elevation);
-    const projected = projectIso(worldX, worldY, elevation);
-    return {
-      x: projected.x,
-      y: projected.y,
-      angle: a.angle + angleDelta * t,
-      distance: d,
-      elevation,
-      level: nearest.level,
-      renderLevel: nearest.renderLevel,
-      segmentIndex: nearest.segmentIndex,
-      segmentType: nearest.segmentType,
-      curveSign: nearest.curveSign,
-      curvature: nearest.curvature,
-      worldX,
-      worldY,
-    };
+    const d = wrap(distance); const exact = (d / totalLength) * CACHE_SAMPLES; const i0 = Math.floor(exact) % CACHE_SAMPLES; const i1 = (i0 + 1) % CACHE_SAMPLES; const t = exact - Math.floor(exact);
+    const a = cache[i0]; const b = cache[i1]; const nearest = t < 0.5 ? a : b; const lerp = (x: number, y: number): number => x + (y - x) * t;
+    let angleDelta = b.angle - a.angle; if (angleDelta > Math.PI) angleDelta -= Math.PI * 2; if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
+    const centerWorldX = lerp(a.worldX, b.worldX); const centerWorldY = lerp(a.worldY, b.worldY);
+    let worldNx = lerp(a.worldNx, b.worldNx); let worldNy = lerp(a.worldNy, b.worldNy); const normalMag = Math.hypot(worldNx, worldNy) || 1; worldNx /= normalMag; worldNy /= normalMag;
+    const worldX = centerWorldX + worldNx * offset; const worldY = centerWorldY + worldNy * offset; const elevation = lerp(a.elevation, b.elevation); const projected = projectIso(worldX, worldY, elevation);
+    return { x: projected.x, y: projected.y, angle: a.angle + angleDelta * t, distance: d, elevation, level: nearest.level, renderLevel: nearest.renderLevel, segmentIndex: nearest.segmentIndex, segmentType: nearest.segmentType, curveSign: nearest.curveSign, curvature: nearest.curvature, worldX, worldY };
   };
 
   const pathForLevel = (level: number, offset: number): string => {
-    let d = '';
-    let drawing = false;
-    for (let i = 0; i <= SVG_SAMPLES; i += 1) {
-      const at = (i / SVG_SAMPLES) * totalLength;
-      const p = sample(at, offset);
-      if (p.renderLevel !== level) {
-        drawing = false;
-        continue;
-      }
-      d += `${drawing ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
-      drawing = true;
-    }
+    let d = ''; let drawing = false;
+    for (let i = 0; i <= SVG_SAMPLES; i += 1) { const at = (i / SVG_SAMPLES) * totalLength; const p = sample(at, offset); if (p.renderLevel !== level) { drawing = false; continue; } d += `${drawing ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)} `; drawing = true; }
     return d;
   };
 
   const asphaltForLevel = (level: number): string => {
-    let d = '';
-    let left: Point[] = [];
-    let right: Point[] = [];
-    const closeSection = (): void => {
-      if (left.length >= 2) {
-        d += `M${left.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')} `;
-        d += `L${right.reverse().map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')} Z `;
-      }
-      left = [];
-      right = [];
-    };
-    for (let i = 0; i <= SVG_SAMPLES; i += 1) {
-      const at = (i / SVG_SAMPLES) * totalLength;
-      const centerPoint = sample(at, 0);
-      if (centerPoint.renderLevel !== level) {
-        closeSection();
-        continue;
-      }
-      left.push(sample(at, -roadHalfWidth));
-      right.push(sample(at, roadHalfWidth));
-    }
-    closeSection();
-    return d;
+    let d = ''; let left: Point[] = []; let right: Point[] = [];
+    const closeSection = (): void => { if (left.length >= 2) { d += `M${left.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')} `; d += `L${right.reverse().map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')} Z `; } left = []; right = []; };
+    for (let i = 0; i <= SVG_SAMPLES; i += 1) { const at = (i / SVG_SAMPLES) * totalLength; const centerPoint = sample(at, 0); if (centerPoint.renderLevel !== level) { closeSection(); continue; } left.push(sample(at, -roadHalfWidth)); right.push(sample(at, roadHalfWidth)); }
+    closeSection(); return d;
   };
 
-  const stack = document.querySelector<HTMLDivElement>('#level-stack');
-  if (!stack) throw new Error('Missing #level-stack');
-  stack.replaceChildren();
-
-  const levelRenderers: LevelRenderer[] = [];
-  const levelSvgs = new Map<number, SVGSVGElement>();
-
-  setBoot(`BUILDING ${compiled.maxLevel + 1} LEVELS...`);
-
+  const stack = document.querySelector<HTMLDivElement>('#level-stack'); if (!stack) throw new Error('Missing #level-stack'); stack.replaceChildren();
+  const levelRenderers: LevelRenderer[] = []; const levelSvgs = new Map<number, SVGSVGElement>(); setBoot(`BUILDING ${compiled.maxLevel + 1} LEVELS...`);
   for (let level = 0; level <= compiled.maxLevel; level += 1) {
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
-    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    svg.setAttribute('class', 'track-level-svg');
-    svg.style.zIndex = String(level * 2);
-
-    const center = pathForLevel(level, 0);
-    const leftEdge = pathForLevel(level, -roadHalfWidth);
-    const rightEdge = pathForLevel(level, roadHalfWidth);
-    const laneA = pathForLevel(level, -laneOffset);
-    const laneB = pathForLevel(level, laneOffset);
-    if (center) {
-      svg.appendChild(svgFill(asphaltForLevel(level), '#ffffff', 0.1));
-      for (const edge of neonKerb(leftEdge)) svg.appendChild(edge);
-      for (const edge of neonKerb(rightEdge)) svg.appendChild(edge);
-      svg.appendChild(svgPath(laneA, '#010309', 7, 0.82, 'round'));
-      svg.appendChild(svgPath(laneB, '#010309', 7, 0.82, 'round'));
-      svg.appendChild(svgPath(laneA, '#83f8ff', 2.2, 0.90, 'round'));
-      svg.appendChild(svgPath(laneB, '#ff72ee', 2.2, 0.86, 'round'));
-    }
-
-    stack.appendChild(svg);
-    levelSvgs.set(level, svg);
-
-    const host = document.createElement('div');
-    host.className = 'pixi-level';
-    host.style.zIndex = String(level * 2 + 1);
-    stack.appendChild(host);
-    const app = await createPixiApp(host);
-    app.stage.sortableChildren = true;
-    levelRenderers.push({ level, app });
+    const svg = document.createElementNS(SVG_NS, 'svg'); svg.setAttribute('viewBox', `0 0 ${WIDTH} ${HEIGHT}`); svg.setAttribute('preserveAspectRatio', 'xMidYMid meet'); svg.setAttribute('class', 'track-level-svg'); svg.style.zIndex = String(level * 2);
+    const center = pathForLevel(level, 0); const leftEdge = pathForLevel(level, -roadHalfWidth); const rightEdge = pathForLevel(level, roadHalfWidth); const laneA = pathForLevel(level, -laneOffset); const laneB = pathForLevel(level, laneOffset);
+    if (center) { svg.appendChild(svgFill(asphaltForLevel(level), '#ffffff', 0.1)); for (const edge of neonKerb(leftEdge)) svg.appendChild(edge); for (const edge of neonKerb(rightEdge)) svg.appendChild(edge); svg.appendChild(svgPath(laneA, '#010309', 7, 0.82, 'round')); svg.appendChild(svgPath(laneB, '#010309', 7, 0.82, 'round')); svg.appendChild(svgPath(laneA, '#83f8ff', 2.2, 0.90, 'round')); svg.appendChild(svgPath(laneB, '#ff72ee', 2.2, 0.86, 'round')); }
+    stack.appendChild(svg); levelSvgs.set(level, svg);
+    const host = document.createElement('div'); host.className = 'pixi-level'; host.style.zIndex = String(level * 2 + 1); stack.appendChild(host); const app = await createPixiApp(host); app.stage.sortableChildren = true; levelRenderers.push({ level, app });
   }
 
-  const startPoint = sample(0, 0);
-  const startSvg = levelSvgs.get(startPoint.renderLevel);
-  if (startSvg) {
-    const cells = 12;
-    for (let i = 0; i < cells; i += 1) {
-      const a = -roadHalfWidth + (i / cells) * roadHalfWidth * 2;
-      const b = -roadHalfWidth + ((i + 1) / cells) * roadHalfWidth * 2;
-      const p0 = sample(0, a);
-      const p1 = sample(0, b);
-      const line = svgPath(`M${p0.x.toFixed(2)},${p0.y.toFixed(2)} L${p1.x.toFixed(2)},${p1.y.toFixed(2)}`, i % 2 === 0 ? '#ffffff' : '#111827', 12, 1, 'butt');
-      line.style.filter = i % 2 === 0 ? 'drop-shadow(0 0 5px rgba(255,255,255,.9))' : 'none';
-      startSvg.appendChild(line);
-    }
-  }
+  const startPoint = sample(0, 0); const startSvg = levelSvgs.get(startPoint.renderLevel);
+  if (startSvg) { const cells = 12; for (let i = 0; i < cells; i += 1) { const a = -roadHalfWidth + (i / cells) * roadHalfWidth * 2; const b = -roadHalfWidth + ((i + 1) / cells) * roadHalfWidth * 2; const p0 = sample(0, a); const p1 = sample(0, b); const line = svgPath(`M${p0.x.toFixed(2)},${p0.y.toFixed(2)} L${p1.x.toFixed(2)},${p1.y.toFixed(2)}`, i % 2 === 0 ? '#ffffff' : '#111827', 12, 1, 'butt'); line.style.filter = i % 2 === 0 ? 'drop-shadow(0 0 5px rgba(255,255,255,.9))' : 'none'; startSvg.appendChild(line); } }
 
-  compiled.segments.filter((segment) => segment.type === 'curve').forEach((segment, curveIndex) => {
-    const svg = levelSvgs.get(segment.renderLevel);
-    if (!svg || segment.curveSign === 0) return;
-    for (let i = 0; i < 5; i += 1) {
-      const p = sample(segment.start + (segment.end - segment.start) * (0.35 + i * 0.06), 0);
-      const text = document.createElementNS(SVG_NS, 'text');
-      text.textContent = '›››';
-      text.setAttribute('x', p.x.toFixed(2));
-      text.setAttribute('y', p.y.toFixed(2));
-      text.setAttribute('class', `curve-chevron ${curveIndex % 2 === 0 ? 'cyan' : 'magenta'}`);
-      text.setAttribute('transform', `rotate(${(p.angle * 180 / Math.PI).toFixed(2)} ${p.x.toFixed(2)} ${p.y.toFixed(2)})`);
-      text.style.animationDelay = `${i * 105}ms`;
-      svg.appendChild(text);
-    }
-  });
+  compiled.segments.filter((segment) => segment.type === 'curve').forEach((segment, curveIndex) => { const svg = levelSvgs.get(segment.renderLevel); if (!svg || segment.curveSign === 0) return; for (let i = 0; i < 5; i += 1) { const p = sample(segment.start + (segment.end - segment.start) * (0.35 + i * 0.06), 0); const text = document.createElementNS(SVG_NS, 'text'); text.textContent = '›››'; text.setAttribute('x', p.x.toFixed(2)); text.setAttribute('y', p.y.toFixed(2)); text.setAttribute('class', `curve-chevron ${curveIndex % 2 === 0 ? 'cyan' : 'magenta'}`); text.setAttribute('transform', `rotate(${(p.angle * 180 / Math.PI).toFixed(2)} ${p.x.toFixed(2)} ${p.y.toFixed(2)})`); text.style.animationDelay = `${i * 105}ms`; svg.appendChild(text); } });
 
-  const uiHost = document.querySelector<HTMLDivElement>('#pixi-ui');
-  if (!uiHost) throw new Error('Missing #pixi-ui');
-  uiHost.style.zIndex = String(compiled.maxLevel * 2 + 3);
-  const uiApp = await createPixiApp(uiHost);
-
-  const racerColor = 0x43f07b;
-  const visuals = new Map<number, CubeVisual>();
-  for (const renderer of levelRenderers) {
-    const visual = createCubeVisual(racerColor);
-    visual.trail.zIndex = 0;
-    visual.root.zIndex = 10000;
-    renderer.app.stage.addChild(visual.trail, visual.root);
-    visuals.set(renderer.level, visual);
-  }
+  const uiHost = document.querySelector<HTMLDivElement>('#pixi-ui'); if (!uiHost) throw new Error('Missing #pixi-ui'); uiHost.style.zIndex = String(compiled.maxLevel * 2 + 3); const uiApp = await createPixiApp(uiHost);
+  const racerColor = 0x43f07b; const visuals = new Map<number, CubeVisual>();
+  for (const renderer of levelRenderers) { const visual = createCubeVisual(racerColor); visual.trail.zIndex = 0; visual.root.zIndex = 10000; renderer.app.stage.addChild(visual.trail, visual.root); visuals.set(renderer.level, visual); }
 
   const now = performance.now();
-  const racer: Racer = {
-    color: racerColor,
-    distance: 0,
-    laneOffset: -laneOffset,
-    laneFrom: -laneOffset,
-    laneTarget: -laneOffset,
-    laneChangeStartedAt: now,
-    visuals,
-    trailHistory: [],
-    laps: 0,
-    currentLapStartedAt: now,
-    lastLapMs: null,
-    bestLapMs: null,
-  };
+  const racer: Racer = { color: racerColor, distance: 0, laneOffset: -laneOffset, laneFrom: -laneOffset, laneTarget: -laneOffset, laneChangeStartedAt: now, visuals, trailHistory: [], laps: 0, currentLapStartedAt: now, lastLapMs: null, bestLapMs: null };
 
-  const mainTimer = new Text({
-    text: '0.000',
-    style: new TextStyle({ fill: '#ffffff', fontSize: 42, fontFamily: 'monospace', fontWeight: '800', align: 'center', stroke: { color: '#07111f', width: 5 } }),
-  });
-  mainTimer.anchor.set(0.5, 0);
-  mainTimer.position.set(WIDTH / 2, 16);
-  uiApp.stage.addChild(mainTimer);
+  const mainTimer = new Text({ text: '0.000', style: new TextStyle({ fill: '#ffffff', fontSize: 42, fontFamily: 'monospace', fontWeight: '800', align: 'center', stroke: { color: '#07111f', width: 5 } }) }); mainTimer.anchor.set(0.5, 0); mainTimer.position.set(WIDTH / 2, 16); uiApp.stage.addChild(mainTimer);
+  const lapHud = new Text({ text: '', style: new TextStyle({ fill: '#cfeff5', fontSize: 18, fontFamily: 'monospace', lineHeight: 24, fontWeight: '700', align: 'center' }) }); lapHud.anchor.set(0.5, 0); lapHud.position.set(WIDTH / 2, 68); uiApp.stage.addChild(lapHud);
+  const centerHud = new Text({ text: '', style: new TextStyle({ fill: '#7d97a8', fontSize: 12, fontFamily: 'monospace', align: 'center' }) }); centerHud.anchor.set(0.5, 0); centerHud.position.set(WIDTH / 2, 124); uiApp.stage.addChild(centerHud);
 
-  const lapHud = new Text({
-    text: '',
-    style: new TextStyle({ fill: '#cfeff5', fontSize: 18, fontFamily: 'monospace', lineHeight: 24, fontWeight: '700', align: 'center' }),
-  });
-  lapHud.anchor.set(0.5, 0);
-  lapHud.position.set(WIDTH / 2, 68);
-  uiApp.stage.addChild(lapHud);
+  boot?.remove(); setupTrackEditor({ current: definition });
+  const cyanButton = new Graphics(); cyanButton.roundRect(34, HEIGHT - 116, 210, 78, 22).fill({ color: 0x27e7ff, alpha: 0.24 }).stroke({ width: 4, color: 0x27e7ff, alpha: 0.95 }); uiApp.stage.addChild(cyanButton);
+  const cyanLabel = new Text({ text: 'CYAN', style: new TextStyle({ fill: '#83f8ff', fontSize: 28, fontWeight: '800', fontFamily: 'monospace' }) }); cyanLabel.anchor.set(0.5); cyanLabel.position.set(139, HEIGHT - 77); uiApp.stage.addChild(cyanLabel);
+  const violetButton = new Graphics(); violetButton.roundRect(WIDTH - 244, HEIGHT - 116, 210, 78, 22).fill({ color: 0xb76cff, alpha: 0.24 }).stroke({ width: 4, color: 0xb76cff, alpha: 0.95 }); uiApp.stage.addChild(violetButton);
+  const violetLabel = new Text({ text: 'VIOLET', style: new TextStyle({ fill: '#ff9af5', fontSize: 28, fontWeight: '800', fontFamily: 'monospace' }) }); violetLabel.anchor.set(0.5); violetLabel.position.set(WIDTH - 139, HEIGHT - 77); uiApp.stage.addChild(violetLabel);
 
-  const centerHud = new Text({
-    text: '',
-    style: new TextStyle({ fill: '#7d97a8', fontSize: 12, fontFamily: 'monospace', align: 'center' }),
-  });
-  centerHud.anchor.set(0.5, 0);
-  centerHud.position.set(WIDTH / 2, 124);
-  uiApp.stage.addChild(centerHud);
-
-  boot?.remove();
-  setupTrackEditor({ current: definition });
-
-  const cyanButton = new Graphics();
-  cyanButton.roundRect(34, HEIGHT - 116, 210, 78, 22).fill({ color: 0x27e7ff, alpha: 0.24 }).stroke({ width: 4, color: 0x27e7ff, alpha: 0.95 });
-  uiApp.stage.addChild(cyanButton);
-  const cyanLabel = new Text({ text: 'CYAN', style: new TextStyle({ fill: '#83f8ff', fontSize: 28, fontWeight: '800', fontFamily: 'monospace' }) });
-  cyanLabel.anchor.set(0.5);
-  cyanLabel.position.set(139, HEIGHT - 77);
-  uiApp.stage.addChild(cyanLabel);
-
-  const violetButton = new Graphics();
-  violetButton.roundRect(WIDTH - 244, HEIGHT - 116, 210, 78, 22).fill({ color: 0xb76cff, alpha: 0.24 }).stroke({ width: 4, color: 0xb76cff, alpha: 0.95 });
-  uiApp.stage.addChild(violetButton);
-  const violetLabel = new Text({ text: 'VIOLET', style: new TextStyle({ fill: '#ff9af5', fontSize: 28, fontWeight: '800', fontFamily: 'monospace' }) });
-  violetLabel.anchor.set(0.5);
-  violetLabel.position.set(WIDTH - 139, HEIGHT - 77);
-  uiApp.stage.addChild(violetLabel);
-
-  const chooseLane = (target: number, timestamp = performance.now()): void => {
-    if (Math.abs(racer.laneTarget - target) < 0.01) return;
-    racer.laneFrom = racer.laneOffset;
-    racer.laneTarget = target;
-    racer.laneChangeStartedAt = timestamp;
-  };
-
-  window.addEventListener('keydown', (event) => {
-    if (event.code === 'KeyA' || event.code === 'ArrowLeft') chooseLane(-laneOffset);
-    if (event.code === 'KeyD' || event.code === 'ArrowRight') chooseLane(laneOffset);
-  });
-
-  const uiCanvas = uiApp.canvas;
-  uiCanvas.style.touchAction = 'none';
-  uiCanvas.addEventListener('pointerdown', (event) => {
-    const rect = uiCanvas.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * WIDTH;
-    chooseLane(x < WIDTH / 2 ? -laneOffset : laneOffset, performance.now());
-  });
+  const chooseLane = (target: number, timestamp = performance.now()): void => { if (Math.abs(racer.laneTarget - target) < 0.01) return; racer.laneFrom = racer.laneOffset; racer.laneTarget = target; racer.laneChangeStartedAt = timestamp; };
+  window.addEventListener('keydown', (event) => { if (event.code === 'KeyA' || event.code === 'ArrowLeft') chooseLane(-laneOffset); if (event.code === 'KeyD' || event.code === 'ArrowRight') chooseLane(laneOffset); });
+  const uiCanvas = uiApp.canvas; uiCanvas.style.touchAction = 'none'; uiCanvas.addEventListener('pointerdown', (event) => { const rect = uiCanvas.getBoundingClientRect(); const x = ((event.clientX - rect.left) / rect.width) * WIDTH; chooseLane(x < WIDTH / 2 ? -laneOffset : laneOffset, performance.now()); });
 
   const renderRacer = (p: TrackPoint, timestamp: number): void => {
-    const look = 14;
-    const behind = sample(racer.distance - look, racer.laneOffset);
-    const ahead = sample(racer.distance + look, racer.laneOffset);
-    const worldDx = ahead.worldX - behind.worldX;
-    const worldDy = ahead.worldY - behind.worldY;
-    const yaw = Math.atan2(worldDy, worldDx);
-    const dz = ahead.elevation - behind.elevation;
-    const horizontal = Math.hypot(worldDx, worldDy) || look * 2;
-    const pitch = Math.atan2(dz, horizontal);
-    const horizontalDepth = p.worldX * 0.26 + p.worldY * 0.36;
-
+    const look = 14; const behind = sample(racer.distance - look, racer.laneOffset); const ahead = sample(racer.distance + look, racer.laneOffset);
+    const worldDx = ahead.worldX - behind.worldX; const worldDy = ahead.worldY - behind.worldY; const yaw = Math.atan2(worldDy, worldDx); const dz = ahead.elevation - behind.elevation; const horizontal = Math.hypot(worldDx, worldDy) || look * 2; const pitch = Math.atan2(dz, horizontal); const horizontalDepth = p.worldX * 0.26 + p.worldY * 0.36;
     racer.trailHistory.push({ point: p, timestamp });
-    const trailWindowMs = 185;
-    while (racer.trailHistory.length > 2 && racer.trailHistory[0].timestamp < timestamp - trailWindowMs) {
-      racer.trailHistory.shift();
-    }
-
+    const trailWindowMs = 185; while (racer.trailHistory.length > 2 && racer.trailHistory[0].timestamp < timestamp - trailWindowMs) racer.trailHistory.shift();
     for (const [level, visual] of racer.visuals) {
-      const active = level === p.renderLevel;
-      visual.root.visible = active;
-      visual.trail.visible = active;
-      if (!active) continue;
-
-      visual.root.position.set(p.x, p.y - 3);
-      visual.root.zIndex = 10000 + horizontalDepth;
-      visual.root.scale.set(0.84);
-      visual.glow.alpha = 0.88;
-      drawCube3d(visual, racer.color, yaw, pitch);
-
-      visual.trail.clear();
-      const historyPoints = racer.trailHistory
-        .map((entry) => entry.point)
-        .filter((point) => point.renderLevel === level);
-      drawOpenPath(visual.trail, historyPoints, 34, racer.color, 0.07);
-      drawOpenPath(visual.trail, historyPoints, 16, racer.color, 0.17);
-      drawOpenPath(visual.trail, historyPoints, 5, 0xe9ffff, 0.76);
+      const active = level === p.renderLevel; visual.root.visible = active; visual.trail.visible = active; if (!active) continue;
+      visual.root.position.set(p.x, p.y - 3); visual.root.zIndex = 10000 + horizontalDepth; visual.root.scale.set(0.84); visual.glow.alpha = 0.88; drawCube3d(visual, racer.color, yaw, pitch);
+      visual.trail.clear(); const historyPoints = racer.trailHistory.map((entry) => entry.point).filter((point) => point.renderLevel === level);
+      drawOpenPath(visual.trail, historyPoints, 34, racer.color, 0.07); drawOpenPath(visual.trail, historyPoints, 16, racer.color, 0.17); drawOpenPath(visual.trail, historyPoints, 5, 0xe9ffff, 0.76);
     }
   };
 
-  let frames = 0;
-  let elapsed = 0;
-  let fps = 0;
-  let lastTime = performance.now();
-
+  let frames = 0; let elapsed = 0; let fps = 0; let lastTime = performance.now();
   const tick = (timestamp: number): void => {
-    const deltaMs = Math.min(timestamp - lastTime, 40);
-    lastTime = timestamp;
-    const dt = deltaMs / 1000;
-
-    const laneProgress = smoothstep((timestamp - racer.laneChangeStartedAt) / GAMEPLAY.laneChangeMs);
-    racer.laneOffset = racer.laneFrom + (racer.laneTarget - racer.laneFrom) * laneProgress;
-
-    const before = sample(racer.distance, racer.laneOffset);
-    const laneScale = Math.max(0.15, 1 - before.curvature * racer.laneOffset);
-    const centerAdvance = (GAMEPLAY.cruiseSpeed / laneScale) * speedMultiplier * dt;
-    const unwrappedDistance = racer.distance + centerAdvance;
-    const crossedStart = unwrappedDistance >= totalLength;
-    racer.distance = wrap(unwrappedDistance);
-
-    if (crossedStart) {
-      const lapMs = timestamp - racer.currentLapStartedAt;
-      racer.currentLapStartedAt = timestamp;
-      racer.laps += 1;
-      racer.lastLapMs = lapMs;
-      racer.bestLapMs = racer.bestLapMs === null ? lapMs : Math.min(racer.bestLapMs, lapMs);
-    }
-
-    renderRacer(sample(racer.distance, racer.laneOffset), timestamp);
-    for (const renderer of levelRenderers) renderer.app.renderer.render(renderer.app.stage);
-
-    frames += 1;
-    elapsed += deltaMs;
-    if (elapsed >= 500) {
-      fps = (frames * 1000) / elapsed;
-      frames = 0;
-      elapsed = 0;
-    }
-
-    mainTimer.text = formatLap(timestamp - racer.currentLapStartedAt);
-    lapHud.text = `VUELTA ${racer.laps + 1}   ·   ÚLT ${formatLap(racer.lastLapMs)}   ·   BEST ${formatLap(racer.bestLapMs)}`;
-    centerHud.text = `${definition.name}   ·   FPS ${fps.toFixed(0)}`;
-
-    const onCyan = racer.laneTarget < 0;
-    cyanButton.alpha = onCyan ? 1 : 0.48;
-    violetButton.alpha = onCyan ? 0.48 : 1;
-
-    uiApp.renderer.render(uiApp.stage);
-    requestAnimationFrame(tick);
+    const deltaMs = Math.min(timestamp - lastTime, 40); lastTime = timestamp; const dt = deltaMs / 1000;
+    const laneProgress = smoothstep((timestamp - racer.laneChangeStartedAt) / GAMEPLAY.laneChangeMs); racer.laneOffset = racer.laneFrom + (racer.laneTarget - racer.laneFrom) * laneProgress;
+    const before = sample(racer.distance, racer.laneOffset); const laneScale = Math.max(0.15, 1 - before.curvature * racer.laneOffset); const centerAdvance = (GAMEPLAY.cruiseSpeed / laneScale) * speedMultiplier * dt; const unwrappedDistance = racer.distance + centerAdvance; const crossedStart = unwrappedDistance >= totalLength; racer.distance = wrap(unwrappedDistance);
+    if (crossedStart) { const lapMs = timestamp - racer.currentLapStartedAt; racer.currentLapStartedAt = timestamp; racer.laps += 1; racer.lastLapMs = lapMs; racer.bestLapMs = racer.bestLapMs === null ? lapMs : Math.min(racer.bestLapMs, lapMs); }
+    renderRacer(sample(racer.distance, racer.laneOffset), timestamp); for (const renderer of levelRenderers) renderer.app.renderer.render(renderer.app.stage);
+    frames += 1; elapsed += deltaMs; if (elapsed >= 500) { fps = (frames * 1000) / elapsed; frames = 0; elapsed = 0; }
+    mainTimer.text = formatLap(timestamp - racer.currentLapStartedAt); lapHud.text = `VUELTA ${racer.laps + 1}   ·   ÚLT ${formatLap(racer.lastLapMs)}   ·   BEST ${formatLap(racer.bestLapMs)}`; centerHud.text = `${definition.name}   ·   FPS ${fps.toFixed(0)}`;
+    const onCyan = racer.laneTarget < 0; cyanButton.alpha = onCyan ? 1 : 0.48; violetButton.alpha = onCyan ? 0.48 : 1; uiApp.renderer.render(uiApp.stage); requestAnimationFrame(tick);
   };
-
-  requestAnimationFrame((timestamp) => {
-    lastTime = timestamp;
-    racer.currentLapStartedAt = timestamp;
-    tick(timestamp);
-  });
+  requestAnimationFrame((timestamp) => { lastTime = timestamp; racer.currentLapStartedAt = timestamp; tick(timestamp); });
 }
 
 void main().catch(showBootError);
