@@ -9,18 +9,23 @@ export type CurveSegment = {
   angle: number;
 };
 
-export type TrackSegment = StraightSegment | CurveSegment;
+export type UpSegment = { type: 'up' };
+export type DownSegment = { type: 'down' };
+
+export type TrackSegment = StraightSegment | CurveSegment | UpSegment | DownSegment;
 
 export type TrackDefinition = {
-  version: 1;
+  version: 2;
   id: string;
   name: string;
   closed: boolean;
   autoClose?: boolean;
-  start: { x: number; y: number; heading: number };
+  start: { x: number; y: number; heading: number; level?: number };
   road: { width: number; lanes: number; laneSpacing: number };
-  bridge: { height: number; rampLength: number; plateauLength: number; opacity: number };
-  crossings: { policy: 'auto' | 'flat' | 'bridge' };
+  levels: {
+    height: number;
+    rampLength: number;
+  };
   segments: TrackSegment[];
 };
 
@@ -31,6 +36,10 @@ export type WorldPoint = {
   segmentIndex: number;
   segmentType: TrackSegment['type'];
   curveSign: -1 | 0 | 1;
+  level: number;
+  elevation: number;
+  renderLevel: number;
+  rampDirection: -1 | 0 | 1;
 };
 
 export type Crossing = {
@@ -40,8 +49,23 @@ export type Crossing = {
   distanceB: number;
   segmentA: number;
   segmentB: number;
-  mode: 'flat' | 'bridge';
-  above: 'a' | 'b';
+  levelA: number;
+  levelB: number;
+  elevationA: number;
+  elevationB: number;
+  mode: 'crossing' | 'overpass';
+  above: 'a' | 'b' | null;
+};
+
+export type SegmentRange = {
+  segmentIndex: number;
+  type: TrackSegment['type'];
+  start: number;
+  end: number;
+  startLevel: number;
+  endLevel: number;
+  renderLevel: number;
+  curveSign: -1 | 0 | 1;
 };
 
 export type CompiledTrack = {
@@ -49,12 +73,24 @@ export type CompiledTrack = {
   points: WorldPoint[];
   totalLength: number;
   crossings: Crossing[];
+  segments: SegmentRange[];
+  minLevel: number;
+  maxLevel: number;
 };
 
 const DEG = Math.PI / 180;
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function smoothstep(value: number): number {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+}
+
+function segmentLength(segment: TrackSegment, rampLength: number): number {
+  return segment.type === 'up' || segment.type === 'down' ? rampLength : segment.length;
 }
 
 function segmentIntersection(
@@ -78,63 +114,162 @@ function segmentIntersection(
 }
 
 export function compileTrack(definition: TrackDefinition, sampleStep = 6): CompiledTrack {
+  if (definition.version !== 2) throw new Error(`Unsupported track version: ${definition.version}`);
+  if (definition.levels.height <= 0 || definition.levels.rampLength <= 0) {
+    throw new Error('levels.height and levels.rampLength must be > 0');
+  }
+
   const points: WorldPoint[] = [];
+  const ranges: SegmentRange[] = [];
   let x = definition.start.x;
   let y = definition.start.y;
   let heading = definition.start.heading * DEG;
   let distance = 0;
+  let level = definition.start.level ?? 0;
+  let minLevel = level;
+  let maxLevel = level;
 
-  const push = (segmentIndex: number, segmentType: TrackSegment['type'], curveSign: -1 | 0 | 1): void => {
-    points.push({ x, y, distance, segmentIndex, segmentType, curveSign });
+  if (level < 0) throw new Error('Track start level cannot be negative');
+
+  const push = (
+    segmentIndex: number,
+    segmentType: TrackSegment['type'],
+    curveSign: -1 | 0 | 1,
+    pointLevel: number,
+    elevation: number,
+    renderLevel: number,
+    rampDirection: -1 | 0 | 1,
+  ): void => {
+    points.push({
+      x,
+      y,
+      distance,
+      segmentIndex,
+      segmentType,
+      curveSign,
+      level: pointLevel,
+      elevation,
+      renderLevel,
+      rampDirection,
+    });
   };
 
-  push(0, definition.segments[0]?.type ?? 'straight', 0);
+  const firstType = definition.segments[0]?.type ?? 'straight';
+  push(0, firstType, 0, level, level * definition.levels.height, level, 0);
 
   definition.segments.forEach((segment, segmentIndex) => {
-    const steps = Math.max(2, Math.ceil(segment.length / sampleStep));
-    if (segment.type === 'straight') {
+    const length = segmentLength(segment, definition.levels.rampLength);
+    const steps = Math.max(2, Math.ceil(length / sampleStep));
+    const startDistance = distance;
+    const startLevel = level;
+    let endLevel = level;
+    let curveSign: -1 | 0 | 1 = 0;
+
+    if (segment.type === 'down' && level <= 0) {
+      throw new Error(`Segment ${segmentIndex}: cannot go down below level 0`);
+    }
+
+    if (segment.type === 'up' || segment.type === 'down') {
+      const direction: -1 | 1 = segment.type === 'up' ? 1 : -1;
+      endLevel = level + direction;
+      const renderLevel = Math.max(startLevel, endLevel);
+      const step = length / steps;
+      for (let i = 1; i <= steps; i += 1) {
+        const t = i / steps;
+        x += Math.cos(heading) * step;
+        y += Math.sin(heading) * step;
+        distance += step;
+        const progress = smoothstep(t);
+        const elevation = lerp(startLevel, endLevel, progress) * definition.levels.height;
+        const pointLevel = t < 0.5 ? startLevel : endLevel;
+        push(segmentIndex, segment.type, 0, pointLevel, elevation, renderLevel, direction);
+      }
+      level = endLevel;
+    } else if (segment.type === 'straight') {
       const step = segment.length / steps;
       for (let i = 0; i < steps; i += 1) {
         x += Math.cos(heading) * step;
         y += Math.sin(heading) * step;
         distance += step;
-        push(segmentIndex, 'straight', 0);
+        push(segmentIndex, 'straight', 0, level, level * definition.levels.height, level, 0);
       }
-      return;
-    }
-
-    const totalAngle = segment.angle * DEG;
-    const radius = segment.length / Math.abs(totalAngle);
-    const sign: -1 | 1 = segment.angle >= 0 ? 1 : -1;
-    const cx = x - Math.sin(heading) * radius * sign;
-    const cy = y + Math.cos(heading) * radius * sign;
-    const startRadiusAngle = Math.atan2(y - cy, x - cx);
-    for (let i = 1; i <= steps; i += 1) {
-      const t = i / steps;
-      const radiusAngle = startRadiusAngle + totalAngle * t;
-      x = cx + Math.cos(radiusAngle) * radius;
-      y = cy + Math.sin(radiusAngle) * radius;
-      distance += segment.length / steps;
-      push(segmentIndex, 'curve', sign);
-    }
-    heading += totalAngle;
-  });
-
-  if (definition.closed && definition.autoClose !== false) {
-    const first = points[0];
-    const last = points[points.length - 1];
-    const closeLength = Math.hypot(first.x - last.x, first.y - last.y);
-    if (closeLength > sampleStep) {
-      const steps = Math.max(2, Math.ceil(closeLength / sampleStep));
-      const startX = last.x;
-      const startY = last.y;
-      const startDistance = distance;
+    } else {
+      const totalAngle = segment.angle * DEG;
+      if (Math.abs(totalAngle) < 1e-6) throw new Error(`Segment ${segmentIndex}: curve angle cannot be 0`);
+      const radius = segment.length / Math.abs(totalAngle);
+      const sign: -1 | 1 = segment.angle >= 0 ? 1 : -1;
+      curveSign = sign;
+      const cx = x - Math.sin(heading) * radius * sign;
+      const cy = y + Math.cos(heading) * radius * sign;
+      const startRadiusAngle = Math.atan2(y - cy, x - cx);
       for (let i = 1; i <= steps; i += 1) {
         const t = i / steps;
-        x = lerp(startX, first.x, t);
-        y = lerp(startY, first.y, t);
-        distance = startDistance + closeLength * t;
-        points.push({ x, y, distance, segmentIndex: definition.segments.length, segmentType: 'straight', curveSign: 0 });
+        const radiusAngle = startRadiusAngle + totalAngle * t;
+        x = cx + Math.cos(radiusAngle) * radius;
+        y = cy + Math.sin(radiusAngle) * radius;
+        distance += segment.length / steps;
+        push(segmentIndex, 'curve', sign, level, level * definition.levels.height, level, 0);
+      }
+      heading += totalAngle;
+    }
+
+    minLevel = Math.min(minLevel, startLevel, endLevel);
+    maxLevel = Math.max(maxLevel, startLevel, endLevel);
+    ranges.push({
+      segmentIndex,
+      type: segment.type,
+      start: startDistance,
+      end: distance,
+      startLevel,
+      endLevel,
+      renderLevel: Math.max(startLevel, endLevel),
+      curveSign,
+    });
+  });
+
+  if (definition.closed) {
+    if (level !== (definition.start.level ?? 0)) {
+      throw new Error(`Closed track finishes at level ${level}, but starts at level ${definition.start.level ?? 0}`);
+    }
+
+    if (definition.autoClose !== false) {
+      const first = points[0];
+      const last = points[points.length - 1];
+      const closeLength = Math.hypot(first.x - last.x, first.y - last.y);
+      if (closeLength > sampleStep) {
+        const steps = Math.max(2, Math.ceil(closeLength / sampleStep));
+        const startX = last.x;
+        const startY = last.y;
+        const startDistance = distance;
+        const closeSegmentIndex = definition.segments.length;
+        for (let i = 1; i <= steps; i += 1) {
+          const t = i / steps;
+          x = lerp(startX, first.x, t);
+          y = lerp(startY, first.y, t);
+          distance = startDistance + closeLength * t;
+          points.push({
+            x,
+            y,
+            distance,
+            segmentIndex: closeSegmentIndex,
+            segmentType: 'straight',
+            curveSign: 0,
+            level,
+            elevation: level * definition.levels.height,
+            renderLevel: level,
+            rampDirection: 0,
+          });
+        }
+        ranges.push({
+          segmentIndex: closeSegmentIndex,
+          type: 'straight',
+          start: startDistance,
+          end: distance,
+          startLevel: level,
+          endLevel: level,
+          renderLevel: level,
+          curveSign: 0,
+        });
       }
     }
   }
@@ -142,6 +277,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
   const totalLength = points[points.length - 1]?.distance ?? 0;
   const crossings: Crossing[] = [];
   const minSeparation = Math.max(80, definition.road.width * 0.8);
+  const sameLevelTolerance = definition.levels.height * 0.35;
 
   for (let i = 0; i < points.length - 1; i += 1) {
     const a0 = points[i];
@@ -157,7 +293,12 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
       if (Math.abs(distanceA - distanceB) < minSeparation) continue;
       const duplicate = crossings.some((crossing) => Math.hypot(crossing.x - hit.x, crossing.y - hit.y) < 20);
       if (duplicate) continue;
-      const mode = definition.crossings.policy === 'flat' ? 'flat' : 'bridge';
+
+      const elevationA = lerp(a0.elevation, a1.elevation, hit.ta);
+      const elevationB = lerp(b0.elevation, b1.elevation, hit.tb);
+      const levelA = hit.ta < 0.5 ? a0.level : a1.level;
+      const levelB = hit.tb < 0.5 ? b0.level : b1.level;
+      const sameLevel = Math.abs(elevationA - elevationB) <= sameLevelTolerance;
       crossings.push({
         x: hit.x,
         y: hit.y,
@@ -165,11 +306,23 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
         distanceB,
         segmentA: a0.segmentIndex,
         segmentB: b0.segmentIndex,
-        mode,
-        above: 'b',
+        levelA,
+        levelB,
+        elevationA,
+        elevationB,
+        mode: sameLevel ? 'crossing' : 'overpass',
+        above: sameLevel ? null : elevationA > elevationB ? 'a' : 'b',
       });
     }
   }
 
-  return { definition, points, totalLength, crossings };
+  return {
+    definition,
+    points,
+    totalLength,
+    crossings,
+    segments: ranges,
+    minLevel,
+    maxLevel,
+  };
 }
