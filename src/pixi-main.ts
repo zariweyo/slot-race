@@ -15,6 +15,7 @@ const HEIGHT = 720;
 const CACHE_SAMPLES = 4096;
 const SVG_SAMPLES = 1600;
 const TRAIL_SCALE = 0.70;
+const DEG = Math.PI / 180;
 
 const PHYSICS = {
   acceleration: 760,
@@ -36,6 +37,7 @@ type TrackPoint = Point & {
   segmentIndex: number;
   segmentType: WorldPoint['segmentType'];
   curveSign: -1 | 0 | 1;
+  curvature: number;
 };
 
 type CachePoint = TrackPoint & {
@@ -61,6 +63,11 @@ type Player = {
   speed: number;
   throttle: boolean;
   visuals: Map<number, PhotonVisual>;
+  laps: number;
+  lastLapMs: number | null;
+  bestLapMs: number | null;
+  lapStartedAt: number;
+  lapArmed: boolean;
 };
 
 type LevelRenderer = {
@@ -96,6 +103,15 @@ function mixColor(from: number, to: number, amount: number): number {
   const g = Math.round(fg + (tg - fg) * t);
   const b = Math.round(fb + (tb - fb) * t);
   return (r << 16) | (g << 8) | b;
+}
+
+function colorHex(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+function formatLap(ms: number | null): string {
+  if (ms === null) return '--.---';
+  return `${Math.floor(ms / 1000)}.${String(Math.floor(ms % 1000)).padStart(3, '0')}`;
 }
 
 function projectIso(x: number, y: number, z = 0): Point {
@@ -249,6 +265,7 @@ async function main(): Promise<void> {
     segmentIndex: number;
     segmentType: WorldPoint['segmentType'];
     curveSign: -1 | 0 | 1;
+    curvature: number;
   }> = [];
 
   for (let i = 0; i < CACHE_SAMPLES; i += 1) {
@@ -256,6 +273,8 @@ async function main(): Promise<void> {
     const original = worldAt(compiled, distance);
     const fitted = toCanvasWorld(original.x, original.y);
     const projected = projectIso(fitted.x, fitted.y, original.elevation);
+    const segment = definition.segments[original.segmentIndex];
+    const curvature = segment?.type === 'curve' ? (segment.angle * DEG) / segment.length : 0;
     rawWorld.push({
       worldX: fitted.x,
       worldY: fitted.y,
@@ -268,6 +287,7 @@ async function main(): Promise<void> {
       segmentIndex: original.segmentIndex,
       segmentType: original.segmentType,
       curveSign: original.curveSign,
+      curvature,
     });
   }
 
@@ -337,6 +357,7 @@ async function main(): Promise<void> {
       segmentIndex: nearest.segmentIndex,
       segmentType: nearest.segmentType,
       curveSign: nearest.curveSign,
+      curvature: nearest.curvature,
     };
   };
 
@@ -428,7 +449,20 @@ async function main(): Promise<void> {
       renderer.app.stage.addChild(visual.trail, visual.root);
       visuals.set(renderer.level, visual);
     }
-    return { id, color, laneOffset: offset, distance, speed: 0, throttle: false, visuals };
+    return {
+      id,
+      color,
+      laneOffset: offset,
+      distance,
+      speed: 0,
+      throttle: false,
+      visuals,
+      laps: 0,
+      lastLapMs: null,
+      bestLapMs: null,
+      lapStartedAt: performance.now(),
+      lapArmed: false,
+    };
   };
 
   const players: Player[] = [
@@ -436,19 +470,28 @@ async function main(): Promise<void> {
     makePlayer(2, 0xb76cff, laneOffset, 35),
   ];
 
-  const hud = new Text({
+  const cyanHud = new Text({
     text: '',
-    style: new TextStyle({ fill: '#dffcff', fontSize: 15, fontFamily: 'monospace', lineHeight: 21 }),
+    style: new TextStyle({ fill: colorHex(players[0].color), fontSize: 16, fontFamily: 'monospace', lineHeight: 22, fontWeight: '700' }),
   });
-  hud.position.set(24, 22);
-  uiApp.stage.addChild(hud);
+  cyanHud.position.set(24, 20);
+  uiApp.stage.addChild(cyanHud);
 
-  const note = new Text({
-    text: 'LEFT HALF = CYAN   //   RIGHT HALF = VIOLET   //   MULTI-LEVEL CYCLIC TRACK',
-    style: new TextStyle({ fill: '#72e9f7', fontSize: 12, fontFamily: 'Arial' }),
+  const violetHud = new Text({
+    text: '',
+    style: new TextStyle({ fill: colorHex(players[1].color), fontSize: 16, fontFamily: 'monospace', lineHeight: 22, fontWeight: '700', align: 'right' }),
   });
-  note.position.set(24, HEIGHT - 34);
-  uiApp.stage.addChild(note);
+  violetHud.anchor.set(1, 0);
+  violetHud.position.set(WIDTH - 24, 20);
+  uiApp.stage.addChild(violetHud);
+
+  const centerHud = new Text({
+    text: '',
+    style: new TextStyle({ fill: '#cfeff5', fontSize: 13, fontFamily: 'monospace', align: 'center' }),
+  });
+  centerHud.anchor.set(0.5, 0);
+  centerHud.position.set(WIDTH / 2, 22);
+  uiApp.stage.addChild(centerHud);
 
   boot?.remove();
   setupTrackEditor({ current: definition });
@@ -514,12 +557,7 @@ async function main(): Promise<void> {
   let frames = 0;
   let elapsed = 0;
   let fps = 0;
-  let maxFrame = 0;
-  let maxWindow = 0;
   let lastTime = performance.now();
-
-  const sameLevelCrossings = compiled.crossings.filter((crossing) => crossing.mode === 'crossing').length;
-  const overpasses = compiled.crossings.filter((crossing) => crossing.mode === 'overpass').length;
 
   const tick = (now: number): void => {
     const deltaMs = Math.min(now - lastTime, 40);
@@ -529,7 +567,28 @@ async function main(): Promise<void> {
     for (const player of players) {
       player.speed += (player.throttle ? PHYSICS.acceleration : -PHYSICS.coastDrag) * dt;
       player.speed = Math.max(0, Math.min(PHYSICS.maxSpeed, player.speed));
-      player.distance = wrap(player.distance + player.speed * dt);
+
+      const beforeDistance = player.distance;
+      const before = sample(beforeDistance, player.laneOffset);
+      const laneScale = Math.max(0.15, 1 - before.curvature * player.laneOffset);
+      const centerAdvance = (player.speed / laneScale) * dt;
+      const unwrappedDistance = beforeDistance + centerAdvance;
+      const crossedStart = unwrappedDistance >= totalLength;
+      player.distance = wrap(unwrappedDistance);
+
+      if (crossedStart) {
+        if (!player.lapArmed) {
+          player.lapArmed = true;
+          player.lapStartedAt = now;
+        } else {
+          const lapMs = now - player.lapStartedAt;
+          player.lapStartedAt = now;
+          player.laps += 1;
+          player.lastLapMs = lapMs;
+          player.bestLapMs = player.bestLapMs === null ? lapMs : Math.min(player.bestLapMs, lapMs);
+        }
+      }
+
       const p = sample(player.distance, player.laneOffset);
       renderPlayer(player, p, clamp01(player.speed / PHYSICS.maxSpeed));
     }
@@ -538,27 +597,23 @@ async function main(): Promise<void> {
 
     frames += 1;
     elapsed += deltaMs;
-    maxWindow += deltaMs;
-    maxFrame = Math.max(maxFrame, deltaMs);
     if (elapsed >= 500) {
       fps = (frames * 1000) / elapsed;
       frames = 0;
       elapsed = 0;
     }
-    if (maxWindow >= 5000) {
-      maxWindow = 0;
-      maxFrame = deltaMs;
-    }
 
-    const p1 = sample(players[0].distance, players[0].laneOffset);
-    const p2 = sample(players[1].distance, players[1].laneOffset);
-    hud.text = `TRACK ${definition.id}  ${Math.round(totalLength)}m  LEVELS ${compiled.maxLevel + 1}\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nCROSSINGS ${sameLevelCrossings}   OVERPASSES ${overpasses}\nCYAN   ${Math.round(players[0].speed * 0.82)}   L${p1.level} RZ${p1.renderLevel * 2 + 1} H${p1.elevation.toFixed(0)}\nVIOLET ${Math.round(players[1].speed * 0.82)}   L${p2.level} RZ${p2.renderLevel * 2 + 1} H${p2.elevation.toFixed(0)}`;
+    cyanHud.text = `CYAN\nVUELTAS ${players[0].laps}\nULT ${formatLap(players[0].lastLapMs)}\nBEST ${formatLap(players[0].bestLapMs)}`;
+    violetHud.text = `VIOLET\nVUELTAS ${players[1].laps}\nULT ${formatLap(players[1].lastLapMs)}\nBEST ${formatLap(players[1].bestLapMs)}`;
+    centerHud.text = `${definition.name}\nFPS ${fps.toFixed(0)}`;
+
     uiApp.renderer.render(uiApp.stage);
     requestAnimationFrame(tick);
   };
 
   requestAnimationFrame((now) => {
     lastTime = now;
+    players.forEach((player) => { player.lapStartedAt = now; });
     tick(now);
   });
 }
