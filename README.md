@@ -1,16 +1,18 @@
 # Slot Race
 
-Version zero of a lightweight slot-car racing game built with Phaser + TypeScript.
+V1 of a lightweight futuristic slot-racing prototype built with PixiJS + TypeScript.
 
 ## What is included
 
-- Two-lane oval slot track, with one active car in v0.
-- One-button throttle: hold to accelerate, release to coast with inertia.
-- Curve grip model with progressive drift before the car leaves the slot.
-- Off-track animation, automatic respawn, blinking recovery period, and race continuation.
-- Lap counter, current lap time, last lap, best lap and speed HUD.
-- Top-down Le Mans-style prototype car drawn directly with Phaser graphics.
-- Responsive browser layout suitable for desktop and mobile.
+- PixiJS as the single game renderer.
+- Isometric multi-level cyclic tracks generated from JSON.
+- Standard track slots: `straight`, `curve`, `up`, `down`.
+- Two local photons with independent throttle controls.
+- Precached track sampling for stable 60 FPS rendering.
+- Dynamic SVG/Pixi depth layers for multiple height levels.
+- Track crossings and overpasses derived from geometry.
+- Built-in track editor with create, edit, save and load actions.
+- Track persistence in IndexedDB.
 - GitHub Pages deployment through GitHub Actions.
 
 ## Run locally
@@ -28,25 +30,28 @@ npm run build
 
 ## Controls
 
-- Desktop: hold `Space` or the red accelerate button.
-- Touch: hold the red accelerate button.
+- Left half / `A` / `←`: cyan photon.
+- Right half / `D` / `→`: violet photon.
+- Use **Editor de pista** to edit or create circuits.
 
 ## Architecture
 
 ```text
 src/
   game/
-    entities/      # Car and future race entities
-    scenes/        # Phaser scenes
-    systems/       # Lap timing and future game systems
-    track/         # Track geometry and sampling
-    config.ts      # Gameplay tuning
-  main.ts
+    track/
+      TrackCompiler.ts
+      TrackEditor.ts
+      TrackStorage.ts
+  tracks/
+    neon-long.json
+  pixi-main.ts
   styles.css
+index.html
 ```
 
-The oval is parametric rather than image-based. Cars are represented by distance along a lane, which keeps the model ready for a future authoritative multiplayer server (for example Colyseus) without synchronizing arbitrary x/y positions.
+The track is stored as semantic JSON rather than SVG or arbitrary points. At startup it is compiled into logical geometry, levels and crossings, then precached for rendering. SVG renders the static track layers while PixiJS renders photons, trails and UI.
 
 ## GitHub Pages
 
-The workflow in `.github/workflows/pages.yml` deploys on every push to `main` and can also be launched manually with **Actions → Deploy GitHub Pages → Run workflow**.
+The workflow in `.github/workflows/pages.yml` deploys the Vite build to GitHub Pages and can also be launched manually from GitHub Actions.
