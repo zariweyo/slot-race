@@ -19,6 +19,12 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+function stripMetadata(row: StoredTrack): TrackDefinition {
+  const definition = structuredClone(row) as Partial<StoredTrack>;
+  delete definition.updatedAt;
+  return definition as TrackDefinition;
+}
+
 export async function saveTrack(definition: TrackDefinition): Promise<void> {
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
@@ -38,9 +44,7 @@ export async function getTrack(id: string): Promise<TrackDefinition | null> {
     request.onerror = () => reject(request.error ?? new Error('Unable to load track'));
   });
   db.close();
-  if (!result) return null;
-  const { updatedAt: _updatedAt, ...definition } = result;
-  return definition;
+  return result ? stripMetadata(result) : null;
 }
 
 export async function listTracks(): Promise<TrackDefinition[]> {
@@ -51,9 +55,7 @@ export async function listTracks(): Promise<TrackDefinition[]> {
     request.onerror = () => reject(request.error ?? new Error('Unable to list tracks'));
   });
   db.close();
-  return rows
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .map(({ updatedAt: _updatedAt, ...definition }) => definition);
+  return rows.sort((a, b) => b.updatedAt - a.updatedAt).map(stripMetadata);
 }
 
 export function getActiveTrackId(): string | null {
