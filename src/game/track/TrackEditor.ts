@@ -19,11 +19,32 @@ function createSegment(type: TrackSegment['type']): TrackSegment {
   return { type };
 }
 
+function createNewTrack(current: TrackDefinition): TrackDefinition {
+  const stamp = Date.now().toString(36);
+  return {
+    version: current.version,
+    id: `track-${stamp}`,
+    name: 'Nuevo circuito',
+    closed: true,
+    autoClose: true,
+    start: { x: 0, y: 0, heading: 0, level: 0 },
+    road: clone(current.road),
+    levels: clone(current.levels),
+    segments: [
+      { type: 'straight', length: 520 },
+      { type: 'curve', length: 377, angle: 180 },
+      { type: 'straight', length: 520 },
+      { type: 'curve', length: 377, angle: 180 },
+    ],
+  };
+}
+
 export function setupTrackEditor(options: EditorOptions): void {
   const openButton = document.querySelector<HTMLButtonElement>('#track-editor-open');
   const modal = document.querySelector<HTMLDivElement>('#track-editor-modal');
   const closeButton = document.querySelector<HTMLButtonElement>('#track-editor-close');
   const list = document.querySelector<HTMLDivElement>('#track-editor-list');
+  const newButton = document.querySelector<HTMLButtonElement>('#track-editor-new');
   const addSelect = document.querySelector<HTMLSelectElement>('#track-editor-add-type');
   const addButton = document.querySelector<HTMLButtonElement>('#track-editor-add');
   const saveButton = document.querySelector<HTMLButtonElement>('#track-editor-save');
@@ -33,7 +54,7 @@ export function setupTrackEditor(options: EditorOptions): void {
   const idInput = document.querySelector<HTMLInputElement>('#track-editor-id');
   const status = document.querySelector<HTMLDivElement>('#track-editor-status');
 
-  if (!openButton || !modal || !closeButton || !list || !addSelect || !addButton || !saveButton || !loadSelect || !loadButton || !nameInput || !idInput || !status) {
+  if (!openButton || !modal || !closeButton || !list || !newButton || !addSelect || !addButton || !saveButton || !loadSelect || !loadButton || !nameInput || !idInput || !status) {
     console.warn('Track editor markup is incomplete');
     return;
   }
@@ -159,6 +180,12 @@ export function setupTrackEditor(options: EditorOptions): void {
   closeButton.addEventListener('click', () => modal.classList.remove('open'));
   modal.addEventListener('click', (event) => {
     if (event.target === modal) modal.classList.remove('open');
+  });
+
+  newButton.addEventListener('click', () => {
+    draft = createNewTrack(options.current);
+    render();
+    setStatus('Nuevo circuito sin guardar');
   });
 
   addButton.addEventListener('click', () => {
