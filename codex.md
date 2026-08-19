@@ -2,266 +2,178 @@
 
 ## Goal
 
-`slot-race` is a proof of concept for a fast arcade slot-racing game inspired by Scalextric, but with a futuristic photon theme instead of cars. The long-term direction is web first, with later integration into Angular/Ionic/Capacitor for Android and potentially iOS.
+`slot-race` is a web-first arcade racing prototype inspired by Scalextric, but the racers are futuristic photons. The intended later target is Angular/Ionic/Capacitor mobile packaging. Multiplayer is planned, probably with Colyseus, synchronizing logical race state (`distance`, `speed`, lane/level) rather than screen x/y.
 
-The core interaction is intentionally simple: one acceleration control. Holding accelerates; releasing reduces speed through drag/inertia. The player should feel that the photon is moving extremely fast and is managing speed at the limit rather than steering freely.
-
-Multiplayer is a future requirement. Colyseus is the likely server option. The client should ideally synchronize logical progress (`distance`, `speed`, `lane`, state/layer) rather than raw x/y coordinates.
-
-## Technology direction
-
-### Current preferred stack
+## Preferred stack
 
 - Vite + TypeScript.
-- PixiJS for dynamic rendering: photon, trail, dynamic game effects.
-- SVG for static/semi-static track graphics and lightweight CSS/SVG animations.
-- GitHub Pages for manual test deployment.
-- Phaser implementation still exists as the original prototype, but PixiJS performed significantly better on the target device and is now the preferred direction.
+- PixiJS for moving photons, trails, HUD and dynamic effects.
+- SVG for the static/semi-static circuit graphics, neon rails, kerbs and curve chevrons.
+- GitHub Pages for manual test deployments.
 
-### Why PixiJS + SVG
+PixiJS replaced Phaser because it was substantially smoother on the target mobile device.
 
-The track is mostly static and benefits from SVG:
+## Performance rules
 
-- crisp curves at any resolution;
-- easy neon/glow effects;
-- easy animated curve chevrons;
-- lower per-frame GPU/render cost than rebuilding all track geometry in Pixi;
-- good fit for Angular/Ionic because both SVG and Pixi remain web-native.
+The current geometry is precalculated at startup. Do not use SVG `getPointAtLength()` repeatedly in the frame loop. A previous implementation doing many SVG geometry queries per frame fell to roughly 25 FPS; a precalculated 4096-sample cache restored a stable ~60 FPS.
 
-PixiJS is used for moving elements because it gave much better runtime smoothness than the Phaser version on mobile.
+The trail is monochrome per player. A dynamic multicolour trail previously collapsed performance to roughly 10 FPS on the test device. Do not reintroduce expensive per-segment trail colour interpolation without profiling.
 
-## Main test page
+Use open Pixi paths (`moveTo` + `lineTo`) for trails. Closed polygons previously introduced unwanted lines between the trail endpoints / origin.
 
-The current Pixi prototype is built from `pixi.html` and `src/pixi-main.ts`.
+## Coordinate/render invariant
 
-Vite is configured as a multi-page app so both the original main page and `pixi.html` are built.
+The logical viewport is 1280×720. SVG layers and Pixi canvases all fill the same `.game-viewport`, so they receive identical responsive scaling and remain aligned at any viewport size/orientation.
 
-PixiJS is intentionally forced into its own Rollup chunk. This is important: there was a Vite/PixiJS initialization issue where `Application.init()` could remain pending indefinitely when bundled badly with top-level await. Keep the Pixi manual chunk unless there is a verified reason to remove it.
+Circuit geometry is compiled in world coordinates, fitted to the viewport, then projected isometrically. Static SVG and dynamic Pixi positions are both derived from the same compiled/cache geometry.
 
-## Visual direction
+## Track data model
 
-The art direction is futuristic neon rather than retro.
+Tracks are persisted as JSON, currently under `src/tracks/`. The active test track is `src/tracks/neon-long.json` (id `neon-levels`).
 
-Track:
+Track schema version is now **2**. The main segment grammar is deliberately small:
 
-- dark futuristic surface;
-- cyan/magenta rail lighting;
-- glow effects;
-- animated sequential `>>>` chevrons on dangerous curves, like illuminated road chevrons;
-- SVG handles these static/basic animated elements.
+```json
+{ "type": "straight", "length": 300 }
+{ "type": "curve", "length": 240, "angle": 90 }
+{ "type": "up" }
+{ "type": "down" }
+```
 
-Photon:
+Positive curve angle turns one direction and negative angle the other. `up` and `down` are standardized slots: they do not carry their own length/slope. Global level parameters define them:
 
-- pointed water-drop / projectile silhouette;
-- no drift;
-- always constrained to its rail for now;
-- strong visible trail;
-- trail currently MUST remain monochrome for performance;
-- photon base color can vary per player in future;
-- red is reserved as a speed/limit state and should not be an available base player color;
-- the photon tip/body may migrate toward red at very high speed, but avoid expensive per-segment trail color gradients.
+```json
+"levels": {
+  "height": 88,
+  "rampLength": 235
+}
+```
 
-## Performance findings
+`up` is therefore a straight standardized ramp of `rampLength` that raises the logical level by one. `down` lowers it by one. Curves cannot themselves be ramps in the current grammar.
 
-### Phaser
+A closed track must finish at the same level where it starts. Going below level 0 is a compiler error.
 
-The first Phaser implementation showed progressive jank on mobile. Fixed timestep and render interpolation did not solve it. Disabling only the trail also did not remove the issue. SVG/PixiJS was tested as an alternative.
+## Track compiler
 
-### PixiJS
+`src/game/track/TrackCompiler.ts` compiles the JSON into:
 
-PixiJS performed dramatically better in the same browser/device and is the current direction.
+- sampled world points;
+- accumulated distance;
+- segment metadata/ranges;
+- logical level and continuous elevation;
+- render level;
+- curve direction;
+- detected geometric crossings;
+- min/max level.
 
-Important performance lesson:
+`up/down` elevation uses a smooth transition between levels. For rendering, a ramp belongs to the higher of the two levels it connects. This keeps the dynamic photon visually above the ramp surface for the entire transition.
 
-- a dynamic multicolor trail caused FPS to collapse to roughly 10 FPS on the test device;
-- reverting the trail to a single color restored good rendering performance;
-- do not reintroduce per-frame multi-segment color interpolation without profiling it first.
+## Crossings — no automatic bridges
 
-The trail should use open paths (`moveTo` + `lineTo`). Earlier use of polygon drawing closed the geometry and caused visual lines from trail end to start and from `(0,0)` to rails.
+**There are no bridge objects anymore.**
 
-## Coordinate system and alignment
+The compiler detects intersections but never mutates them into bridges. It classifies them:
 
-Alignment between SVG track and Pixi photon is critical.
+- `crossing`: both passages intersect at effectively the same elevation; this is a real same-level crossing.
+- `overpass`: passages intersect in x/y but have different elevations/levels; the higher track naturally renders above the lower track.
 
-Current invariant:
+This is a key architectural decision. Complex vertical circuits are built intentionally with `up/down`, not by automatically inventing bridges at intersections.
 
-- logical viewport is exactly `1280 × 720`;
-- SVG uses `viewBox="0 0 1280 720"`;
-- Pixi renderer uses `1280 × 720`;
-- SVG and Pixi layers fill the SAME `.game-viewport` container;
-- `.game-viewport` is fixed to a 16:9 aspect ratio and scales as one unit;
-- do not independently size SVG and canvas using different object-fit/scale rules.
+## Dynamic depth stack
 
-The visible lane SVG path is authoritative for photon movement. The photon should read the exact visible lane (`#lane-a`) with `getTotalLength()` and `getPointAtLength()` rather than recomputing an approximate mathematical path separately.
-
-This is intended to keep the photon centered on the rail at any viewport size/orientation.
-
-## Current circuit
-
-The current desired test circuit is a simple figure-eight, not the later large multi-bridge experimental track.
-
-The figure-eight is visually preferred and should remain the baseline until bridge layering is solved cleanly.
-
-There is one crossing/bridge at the center.
-
-Bridge goals:
-
-- one branch passes visually above the other;
-- deck is translucent enough that the lower road remains faintly visible;
-- bridge only has strong edges at the upper road shoulders, not thick caps/borders across the road ends;
-- upper rails should be crisp and obvious;
-- lower rails should appear attenuated through/under the bridge.
-
-## Depth / bridge architecture
-
-This is the current architectural experiment and the most important unfinished issue.
-
-Desired generalized depth model:
+Rendering is generated dynamically from the maximum level in the compiled track. Each logical level gets two interleaved layers:
 
 ```text
-z0  SVG base track
-z1  Pixi-under dynamic layer
-z2  SVG bridge / level-2 track structure
-z3  Pixi-over dynamic layer
-z4  UI/input
+level 0 SVG   z0
+level 0 Pixi  z1
+level 1 SVG   z2
+level 1 Pixi  z3
+level 2 SVG   z4
+level 2 Pixi  z5
+...
+UI            above all levels
 ```
 
-For future complex tracks this should generalize to more alternating SVG/Pixi levels.
+This replaces the previous fixed `pixi-under / bridge-svg / pixi-over` design.
 
-Each photon should conceptually have:
+The photon uses the track point's `renderLevel`; its Pixi representation is visible only in that level's renderer. This naturally supports multiple players on different levels simultaneously.
 
-```ts
-currentZ
-futureZ
-```
+## Isometric projection
 
-The track has zones that determine which visual layer a photon should occupy. A look-ahead detector checks a point ahead on the rail and computes `futureZ` before the photon reaches a bridge. This avoids changing depth too late at the exact crossing.
+The circuit is logically 2D plus elevation. A shared `projectIso(x, y, z)` maps the compiled world geometry to the screen. `up/down` modify continuous elevation, so photons visibly climb and descend the standardized ramps.
 
-Example conceptual track metadata:
+Track lateral offsets (lanes, road shoulders) are derived from the logical/world normal before projection. This avoids the apparent lateral drift that occurred when offsets were applied after isometric projection.
 
-```ts
-type TrackZone = {
-  start: number;
-  end: number;
-  zIndex: number;
-};
-```
+## Circuit visuals
 
-For multiplayer, each player must be able to occupy a different level simultaneously. Do NOT solve this by changing the z-index of a single global canvas or bridge SVG. The eventual architecture must allow one player below a bridge while another is above it.
+Current visual direction:
 
-Current implementation uses two Pixi layers/canvases (`pixi-under`, `pixi-over`) interleaved around the SVG bridge. Simulation remains shared. The photon/trail is switched between visual layers based on current/future Z.
+- dark futuristic/neon circuit;
+- cyan and magenta rails;
+- isometric view;
+- red/white racing kerbs on curve interiors plus shorter outside-exit kerbs;
+- sequential chevrons on curves;
+- subtle shadows on standardized ramps so height transitions read visually.
 
-## Current depth bug under investigation
+Static track pieces are generated once, so these decorations should not affect frame-loop performance materially.
 
-Even though HUD/debug state correctly reports `UNDER BRIDGE` and `OVER BRIDGE`, the photon has still visually appeared under the bridge in the over-pass case.
+## Photons and controls
 
-A diagnostic was added to isolate whether this is a DOM/CSS stacking issue or a renderer-selection issue.
+There are currently two local photons for testing:
 
-`pixi-over` currently contains a large translucent red rectangle labeled:
+- cyan: left lane, controlled by left half of screen (`A` / left arrow on keyboard);
+- violet: right lane, controlled by right half (`D` / right arrow).
 
-```text
-Z3 TEST
-```
+Multitouch is supported so both can accelerate simultaneously.
 
-This marker is intentionally temporary.
+Photon shape is compact/rounded rather than a sharp spear. Red is reserved as the high-speed heat state and should not be a normal player base colour.
 
-Interpretation:
-
-- if `Z3 TEST` appears ABOVE the SVG bridge, the DOM stacking order is correct and the bug is in photon/renderer assignment;
-- if `Z3 TEST` appears BELOW the bridge, there is a CSS stacking-context/order problem.
-
-The relevant intended DOM sibling order is:
-
-```html
-<svg class="track-svg">...</svg>     <!-- z0 -->
-<div class="pixi-under"></div>       <!-- z1 -->
-<svg class="bridge-svg">...</svg>    <!-- z2 -->
-<div class="pixi-over"></div>        <!-- z3 -->
-<div class="pixi-ui"></div>          <!-- z4 -->
-```
-
-All of these must remain direct siblings inside the same `.game-viewport` stacking context. Avoid applying `transform`, `opacity`, `filter`, or other stacking-context-generating CSS to the layer containers themselves unless deliberately needed and understood.
-
-## Physics/current feel
-
-The game currently does not use a general physics engine. It uses a custom 1D model along the track path.
-
-Conceptually:
-
-```ts
-speed += acceleration * dt;
-distance += speed * dt;
-```
-
-The SVG path converts `distance` to x/y/orientation.
-
-Current general design goals:
-
-- very high maximum speed;
-- acceleration should not be so aggressive that the player instantly reaches max speed;
-- releasing should reduce speed more noticeably than in the earliest versions;
-- no drift while using photons;
-- no derail/off-track mechanic for now; that will be designed later.
-
-The coast drag was increased from the earlier low value to reduce inertia.
+Current physics is a custom 1D model along the compiled circuit. No general physics engine is used. Releasing the control applies fairly strong drag (`coastDrag` currently 520) to reduce inertia.
 
 ## Multiplayer direction
 
-Future Colyseus synchronization should favor logical race state rather than positions:
+The server should synchronize logical state, for example:
 
 ```text
 playerId
 distance
 speed
 lane
-state
-currentZ/futureZ (or enough track metadata to derive them locally)
+level/state
 ```
 
-Clients reconstruct x/y/angle from the same authoritative SVG path.
+Clients reconstruct x/y/orientation/elevation from the same compiled track. Do not synchronize raw screen coordinates unless a later design requires it.
 
-This helps bandwidth and keeps interpolation deterministic and visually aligned with each client's responsive track.
+## Current files of interest
 
-Multiple photons will have different base colors. Red is excluded as a base color because red indicates high-speed/limit heat state.
+- `pixi.html`: minimal viewport/background + dynamic level stack host.
+- `src/pixi-main.ts`: track compilation integration, cache, dynamic SVG/Pixi levels, two-player simulation/rendering.
+- `src/game/track/TrackCompiler.ts`: version-2 JSON compiler, ramps, levels and crossing classification.
+- `src/tracks/neon-long.json`: current multi-level test circuit.
+- `src/styles.css`: shared responsive viewport and dynamic level styles.
 
-Each photon's trail should move with the same visual depth layer as that photon.
+## Rollback point
 
-## UI/game data already present
+A branch named `V0` was created before the isometric/multi-level experiments, pointing at commit `da6f4828868fcc772f64e92f674c1f9be5751d57`. The connector did not expose tag creation, so `V0` is a branch rather than a Git tag.
 
-The prototype includes or has included:
+## Important mistakes to avoid
 
-- lap counter;
-- current lap time;
-- last lap;
-- best lap;
-- time format using seconds with milliseconds;
-- FPS/frame-time diagnostics during performance work.
+1. Do not return to per-frame SVG geometry queries; use/precompute the cache.
+2. Do not dynamically multicolour the trail without profiling.
+3. Do not independently scale SVG and Pixi layers.
+4. Do not apply lane/road offsets after isometric projection; apply them in world space first.
+5. Do not automatically convert detected intersections into bridges.
+6. Do not solve vertical ordering by moving a single global canvas; each logical level needs independent render depth.
+7. Closed circuits must return to their starting logical level.
 
-These diagnostics can remain while the rendering architecture is unstable.
+## Immediate test focus
 
-## Deployment
+Deploy the Pages workflow and verify:
 
-GitHub Pages deployment is intentionally manual (`workflow_dispatch`) rather than deploying every push. This was chosen after workflow runs accumulated/stuck during rapid iteration.
-
-The user manually runs the Pages workflow when a version is ready to test.
-
-## Important mistakes to avoid repeating
-
-1. Do not use Phaser `Graphics.bezierCurveTo`; it is not a CanvasRenderingContext2D API wrapper and caused TypeScript build failures.
-2. Do not use Pixi `poly()` for trails/rails that must remain open; it can introduce closing lines.
-3. Do not duplicate track geometry independently in SVG and Pixi. Use the visible SVG lane path as authority.
-4. Do not give SVG and Pixi independent responsive sizing rules.
-5. Do not make the trail dynamically multicolor per segment without profiling; this caused severe FPS loss.
-6. Do not solve multiplayer bridge depth by globally moving one canvas above/below the bridge; players need independent depth levels.
-7. Keep the current figure-eight baseline while diagnosing layering; the large multi-bridge experimental circuit was rejected visually.
-
-## Immediate next step
-
-Deploy the current Pages build and inspect the red `Z3 TEST` marker.
-
-Then:
-
-- marker above bridge → debug which Pixi app/canvas is actually drawing the photon when `futureZ` changes;
-- marker below bridge → inspect computed stacking contexts and DOM layer ordering before touching game logic.
-
-Once bridge depth works reliably, remove the red diagnostic marker and continue with generalized track-depth metadata for future complex circuits.
+- stable ~60 FPS with three logical levels;
+- `up` raises level 0→1 and the next `up` raises 1→2;
+- `down` returns 2→1 then 1→0;
+- photon remains visually attached to each ramp;
+- different-level intersections render as natural overpasses;
+- same-level intersections remain true crossings;
+- both local photons can occupy different levels simultaneously.
