@@ -84,9 +84,9 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function smoothstep(value: number): number {
+function smootherstep(value: number): number {
   const t = Math.max(0, Math.min(1, value));
-  return t * t * (3 - 2 * t);
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 function segmentLength(segment: TrackSegment, rampLength: number): number {
@@ -115,6 +115,7 @@ function segmentIntersection(
 
 export function compileTrack(definition: TrackDefinition, sampleStep = 6): CompiledTrack {
   if (definition.version !== 2) throw new Error(`Unsupported track version: ${definition.version}`);
+  if (!definition.closed) throw new Error('Tracks must be cyclic/closed');
   if (definition.levels.height <= 0 || definition.levels.rampLength <= 0) {
     throw new Error('levels.height and levels.rampLength must be > 0');
   }
@@ -179,7 +180,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
         x += Math.cos(heading) * step;
         y += Math.sin(heading) * step;
         distance += step;
-        const progress = smoothstep(t);
+        const progress = smootherstep(t);
         const elevation = lerp(startLevel, endLevel, progress) * definition.levels.height;
         const pointLevel = t < 0.5 ? startLevel : endLevel;
         push(segmentIndex, segment.type, 0, pointLevel, elevation, renderLevel, direction);
@@ -227,50 +228,48 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
     });
   });
 
-  if (definition.closed) {
-    if (level !== (definition.start.level ?? 0)) {
-      throw new Error(`Closed track finishes at level ${level}, but starts at level ${definition.start.level ?? 0}`);
-    }
+  if (level !== (definition.start.level ?? 0)) {
+    throw new Error(`Closed track finishes at level ${level}, but starts at level ${definition.start.level ?? 0}`);
+  }
 
-    if (definition.autoClose !== false) {
-      const first = points[0];
-      const last = points[points.length - 1];
-      const closeLength = Math.hypot(first.x - last.x, first.y - last.y);
-      if (closeLength > sampleStep) {
-        const steps = Math.max(2, Math.ceil(closeLength / sampleStep));
-        const startX = last.x;
-        const startY = last.y;
-        const startDistance = distance;
-        const closeSegmentIndex = definition.segments.length;
-        for (let i = 1; i <= steps; i += 1) {
-          const t = i / steps;
-          x = lerp(startX, first.x, t);
-          y = lerp(startY, first.y, t);
-          distance = startDistance + closeLength * t;
-          points.push({
-            x,
-            y,
-            distance,
-            segmentIndex: closeSegmentIndex,
-            segmentType: 'straight',
-            curveSign: 0,
-            level,
-            elevation: level * definition.levels.height,
-            renderLevel: level,
-            rampDirection: 0,
-          });
-        }
-        ranges.push({
+  if (definition.autoClose !== false) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    const closeLength = Math.hypot(first.x - last.x, first.y - last.y);
+    if (closeLength > sampleStep) {
+      const steps = Math.max(2, Math.ceil(closeLength / sampleStep));
+      const startX = last.x;
+      const startY = last.y;
+      const startDistance = distance;
+      const closeSegmentIndex = definition.segments.length;
+      for (let i = 1; i <= steps; i += 1) {
+        const t = i / steps;
+        x = lerp(startX, first.x, t);
+        y = lerp(startY, first.y, t);
+        distance = startDistance + closeLength * t;
+        points.push({
+          x,
+          y,
+          distance,
           segmentIndex: closeSegmentIndex,
-          type: 'straight',
-          start: startDistance,
-          end: distance,
-          startLevel: level,
-          endLevel: level,
-          renderLevel: level,
+          segmentType: 'straight',
           curveSign: 0,
+          level,
+          elevation: level * definition.levels.height,
+          renderLevel: level,
+          rampDirection: 0,
         });
       }
+      ranges.push({
+        segmentIndex: closeSegmentIndex,
+        type: 'straight',
+        start: startDistance,
+        end: distance,
+        startLevel: level,
+        endLevel: level,
+        renderLevel: level,
+        curveSign: 0,
+      });
     }
   }
 
