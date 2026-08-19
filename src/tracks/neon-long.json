@@ -2,6 +2,7 @@
   "version": 2,
   "id": "stacked-five-u",
   "name": "Stacked Five U",
+  "speedMultiplier": 1,
   "closed": true,
   "autoClose": true,
   "start": {
