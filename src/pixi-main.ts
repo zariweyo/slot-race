@@ -1,15 +1,18 @@
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import './styles.css';
 import trackJson from './tracks/neon-long.json';
-import { compileTrack, type CompiledTrack, type TrackDefinition, type WorldPoint } from './game/track/TrackCompiler';
+import {
+  compileTrack,
+  type CompiledTrack,
+  type TrackDefinition,
+  type WorldPoint,
+} from './game/track/TrackCompiler';
 
 const WIDTH = 1280;
 const HEIGHT = 720;
 const CACHE_SAMPLES = 4096;
-const SVG_SAMPLES = 1400;
-const BRIDGE_ENTRY_LEAD = 115;
+const SVG_SAMPLES = 1600;
 const TRAIL_SCALE = 0.70;
-const MAX_TRAIL_LENGTH = (40 + 520) * TRAIL_SCALE;
 
 const PHYSICS = {
   acceleration: 760,
@@ -18,14 +21,19 @@ const PHYSICS = {
 };
 
 const LIMIT_COLOR = 0xff2638;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 type Point = { x: number; y: number };
+
 type TrackPoint = Point & {
   angle: number;
   distance: number;
-  layer: 0 | 1;
-  underBridge: boolean;
   elevation: number;
+  level: number;
+  renderLevel: number;
+  segmentIndex: number;
+  segmentType: WorldPoint['segmentType'];
+  curveSign: -1 | 0 | 1;
 };
 
 type CachePoint = TrackPoint & {
@@ -45,21 +53,17 @@ type PhotonVisual = {
 
 type Player = {
   id: 1 | 2;
-  name: string;
   color: number;
   laneOffset: number;
   distance: number;
   speed: number;
   throttle: boolean;
-  currentZ: 1 | 3;
-  underVisual: PhotonVisual;
-  overVisual: PhotonVisual;
+  visuals: Map<number, PhotonVisual>;
 };
 
-type CurveRange = {
-  start: number;
-  end: number;
-  sign: -1 | 1;
+type LevelRenderer = {
+  level: number;
+  app: Application;
 };
 
 const boot = document.querySelector<HTMLDivElement>('#pixi-boot');
@@ -78,11 +82,6 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function smoothstep(value: number): number {
-  const t = clamp01(value);
-  return t * t * (3 - 2 * t);
-}
-
 function mixColor(from: number, to: number, amount: number): number {
   const t = clamp01(amount);
   const fr = (from >> 16) & 0xff;
@@ -97,12 +96,6 @@ function mixColor(from: number, to: number, amount: number): number {
   return (r << 16) | (g << 8) | b;
 }
 
-function circularDelta(a: number, b: number, length: number): number {
-  let delta = Math.abs(a - b);
-  if (delta > length / 2) delta = length - delta;
-  return delta;
-}
-
 function projectIso(x: number, y: number, z = 0): Point {
   const dx = x - 640;
   const dy = y - 360;
@@ -110,26 +103,6 @@ function projectIso(x: number, y: number, z = 0): Point {
     x: 640 + dx * 0.86 - dy * 0.42,
     y: 385 + dx * 0.20 + dy * 0.48 - z * 0.90,
   };
-}
-
-function setPath(id: string, d: string): SVGPathElement {
-  const path = document.querySelector<SVGPathElement>(`#${id}`);
-  if (!path) throw new Error(`Missing #${id}`);
-  path.setAttribute('d', d);
-  return path;
-}
-
-function createBridgePath(d: string, stroke: string, width: number, opacity: number, className = ''): SVGPathElement {
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p.setAttribute('d', d);
-  p.setAttribute('fill', 'none');
-  p.setAttribute('stroke', stroke);
-  p.setAttribute('stroke-width', String(width));
-  p.setAttribute('stroke-linecap', 'round');
-  p.setAttribute('stroke-linejoin', 'round');
-  p.setAttribute('opacity', String(opacity));
-  if (className) p.setAttribute('class', className);
-  return p;
 }
 
 function drawOpenPath(graphics: Graphics, points: Point[], width: number, color: number, alpha: number): void {
@@ -159,7 +132,7 @@ function rebuildPhoton(visual: PhotonVisual, ratio: number, baseColor: number): 
   visual.tip.clear().circle(18, 0, 5.5).fill({ color: tipColor, alpha: 1 });
 }
 
-async function createLayer(hostId: string): Promise<Application> {
+async function createPixiApp(host: HTMLElement): Promise<Application> {
   const app = new Application();
   await app.init({
     width: WIDTH,
@@ -171,8 +144,6 @@ async function createLayer(hostId: string): Promise<Application> {
     preference: 'webgl',
     autoStart: false,
   });
-  const host = document.querySelector<HTMLDivElement>(`#${hostId}`);
-  if (!host) throw new Error(`Missing #${hostId}`);
   host.appendChild(app.canvas);
   app.canvas.width = WIDTH;
   app.canvas.height = HEIGHT;
@@ -196,38 +167,36 @@ function worldAt(compiled: CompiledTrack, distance: number): WorldPoint {
   const b = points[Math.min(lo + 1, points.length - 1)];
   const span = Math.max(1e-6, b.distance - a.distance);
   const t = clamp01((d - a.distance) / span);
+  const nearest = t < 0.5 ? a : b;
   return {
     x: a.x + (b.x - a.x) * t,
     y: a.y + (b.y - a.y) * t,
     distance: d,
-    segmentIndex: t < 0.5 ? a.segmentIndex : b.segmentIndex,
-    segmentType: t < 0.5 ? a.segmentType : b.segmentType,
-    curveSign: t < 0.5 ? a.curveSign : b.curveSign,
+    segmentIndex: nearest.segmentIndex,
+    segmentType: nearest.segmentType,
+    curveSign: nearest.curveSign,
+    level: nearest.level,
+    elevation: a.elevation + (b.elevation - a.elevation) * t,
+    renderLevel: nearest.renderLevel,
+    rampDirection: nearest.rampDirection,
   };
 }
 
-function curveRanges(compiled: CompiledTrack): CurveRange[] {
-  const ranges: CurveRange[] = [];
-  let active: CurveRange | null = null;
-  for (const point of compiled.points) {
-    if (point.segmentType === 'curve' && point.curveSign !== 0) {
-      if (!active || active.sign !== point.curveSign || point.distance - active.end > 20) {
-        if (active) ranges.push(active);
-        active = { start: point.distance, end: point.distance, sign: point.curveSign };
-      } else {
-        active.end = point.distance;
-      }
-    } else if (active) {
-      ranges.push(active);
-      active = null;
-    }
-  }
-  if (active) ranges.push(active);
-  return ranges.filter((range) => range.end - range.start > 50);
+function svgPath(d: string, stroke: string, width: number, opacity: number, filter?: string): SVGPathElement {
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', stroke);
+  path.setAttribute('stroke-width', String(width));
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  path.setAttribute('opacity', String(opacity));
+  if (filter) path.setAttribute('filter', filter);
+  return path;
 }
 
 async function main(): Promise<void> {
-  setBoot('PIXI MODULE LOADED\nCOMPILING TRACK JSON...');
+  setBoot('COMPILING MULTI-LEVEL TRACK...');
 
   const definition = trackJson as TrackDefinition;
   const compiled = compileTrack(definition, 5);
@@ -242,47 +211,51 @@ async function main(): Promise<void> {
   );
   const worldWidth = Math.max(1, bounds.maxX - bounds.minX);
   const worldHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const fitScale = Math.min(900 / worldWidth, 520 / worldHeight);
+  const fitScale = Math.min(900 / worldWidth, 500 / worldHeight);
   const worldCenterX = (bounds.minX + bounds.maxX) / 2;
   const worldCenterY = (bounds.minY + bounds.maxY) / 2;
-
   const toCanvasWorld = (x: number, y: number): Point => ({
     x: 640 + (x - worldCenterX) * fitScale,
-    y: 360 + (y - worldCenterY) * fitScale,
+    y: 370 + (y - worldCenterY) * fitScale,
   });
 
-  const sourceLength = compiled.totalLength;
-  const wrap = (distance: number): number => ((distance % sourceLength) + sourceLength) % sourceLength;
+  const totalLength = compiled.totalLength;
+  const wrap = (distance: number): number => ((distance % totalLength) + totalLength) % totalLength;
   const laneOffset = definition.road.laneSpacing / 2;
   const roadHalfWidth = definition.road.width / 2;
-  const bridgeHeight = definition.bridge.height;
-  const bridgeRampLength = definition.bridge.rampLength;
-  const bridgePlateauHalf = definition.bridge.plateauLength / 2;
 
-  const bridgeCrossing = compiled.crossings.find((crossing) => crossing.mode === 'bridge');
-  const bridgeTopDistance = bridgeCrossing
-    ? (bridgeCrossing.above === 'a' ? bridgeCrossing.distanceA : bridgeCrossing.distanceB)
-    : sourceLength * 0.5;
-  const bridgeUnderDistance = bridgeCrossing
-    ? (bridgeCrossing.above === 'a' ? bridgeCrossing.distanceB : bridgeCrossing.distanceA)
-    : 0;
+  const rawWorld: Array<{
+    worldX: number;
+    worldY: number;
+    elevation: number;
+    distance: number;
+    x: number;
+    y: number;
+    level: number;
+    renderLevel: number;
+    segmentIndex: number;
+    segmentType: WorldPoint['segmentType'];
+    curveSign: -1 | 0 | 1;
+  }> = [];
 
-  const elevationAt = (distance: number): number => {
-    const delta = circularDelta(wrap(distance), bridgeTopDistance, sourceLength);
-    if (delta <= bridgePlateauHalf) return bridgeHeight;
-    if (delta >= bridgePlateauHalf + bridgeRampLength) return 0;
-    const rampProgress = 1 - (delta - bridgePlateauHalf) / bridgeRampLength;
-    return bridgeHeight * smoothstep(rampProgress);
-  };
-
-  const rawWorld: Array<{ worldX: number; worldY: number; elevation: number; distance: number; x: number; y: number }> = [];
   for (let i = 0; i < CACHE_SAMPLES; i += 1) {
-    const distance = (i / CACHE_SAMPLES) * sourceLength;
+    const distance = (i / CACHE_SAMPLES) * totalLength;
     const original = worldAt(compiled, distance);
     const fitted = toCanvasWorld(original.x, original.y);
-    const elevation = elevationAt(distance);
-    const projected = projectIso(fitted.x, fitted.y, elevation);
-    rawWorld.push({ worldX: fitted.x, worldY: fitted.y, elevation, distance, ...projected });
+    const projected = projectIso(fitted.x, fitted.y, original.elevation);
+    rawWorld.push({
+      worldX: fitted.x,
+      worldY: fitted.y,
+      elevation: original.elevation,
+      distance,
+      x: projected.x,
+      y: projected.y,
+      level: original.level,
+      renderLevel: original.renderLevel,
+      segmentIndex: original.segmentIndex,
+      segmentType: original.segmentType,
+      curveSign: original.curveSign,
+    });
   }
 
   const cache: CachePoint[] = rawWorld.map((p, i) => {
@@ -295,20 +268,23 @@ async function main(): Promise<void> {
     const worldNy = worldDx / worldMag;
     const screenDx = after.x - before.x;
     const screenDy = after.y - before.y;
-    const angle = Math.atan2(screenDy, screenDx);
-    const layer: 0 | 1 = circularDelta(p.distance, bridgeTopDistance, sourceLength) <= bridgePlateauHalf ? 1 : 0;
-    const underBridge = circularDelta(p.distance, bridgeUnderDistance, sourceLength) <= bridgePlateauHalf;
-    return { ...p, worldNx, worldNy, angle, layer, underBridge };
+    return {
+      ...p,
+      worldNx,
+      worldNy,
+      angle: Math.atan2(screenDy, screenDx),
+    };
   });
 
   const sample = (distance: number, offset = -laneOffset): TrackPoint => {
     const d = wrap(distance);
-    const exact = (d / sourceLength) * CACHE_SAMPLES;
+    const exact = (d / totalLength) * CACHE_SAMPLES;
     const i0 = Math.floor(exact) % CACHE_SAMPLES;
     const i1 = (i0 + 1) % CACHE_SAMPLES;
     const t = exact - Math.floor(exact);
     const a = cache[i0];
     const b = cache[i1];
+    const nearest = t < 0.5 ? a : b;
     const lerp = (x: number, y: number): number => x + (y - x) * t;
     let angleDelta = b.angle - a.angle;
     if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
@@ -327,132 +303,168 @@ async function main(): Promise<void> {
       y: projected.y,
       angle: a.angle + angleDelta * t,
       distance: d,
-      layer: t < 0.5 ? a.layer : b.layer,
-      underBridge: t < 0.5 ? a.underBridge : b.underBridge,
       elevation,
+      level: nearest.level,
+      renderLevel: nearest.renderLevel,
+      segmentIndex: nearest.segmentIndex,
+      segmentType: nearest.segmentType,
+      curveSign: nearest.curveSign,
     };
   };
 
-  const sampledPath = (offset = 0, start = 0, end = sourceLength, samples = SVG_SAMPLES, yShift = 0): string => {
+  const pathForLevel = (level: number, offset: number): string => {
     let d = '';
-    for (let i = 0; i <= samples; i += 1) {
-      const at = start + ((end - start) * i) / samples;
+    let drawing = false;
+    for (let i = 0; i <= SVG_SAMPLES; i += 1) {
+      const at = (i / SVG_SAMPLES) * totalLength;
       const p = sample(at, offset);
-      d += `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${(p.y + yShift).toFixed(2)} `;
+      if (p.renderLevel !== level) {
+        drawing = false;
+        continue;
+      }
+      d += `${drawing ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
+      drawing = true;
     }
     return d;
   };
 
-  const centerD = sampledPath(0);
-  const laneAD = sampledPath(-laneOffset);
-  const laneBD = sampledPath(laneOffset);
-  setPath('track-outer-glow', centerD);
-  setPath('track-border', centerD);
-  setPath('track-road', centerD);
-  setPath('track-inner-sheen', centerD);
-  setPath('lane-a-dark', laneAD);
-  setPath('lane-b-dark', laneBD);
-  setPath('lane-a', laneAD);
-  setPath('lane-b', laneBD);
+  const pathRange = (start: number, end: number, offset: number, samples = 24): string => {
+    let d = '';
+    for (let i = 0; i <= samples; i += 1) {
+      const at = start + ((end - start) * i) / samples;
+      const p = sample(at, offset);
+      d += `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
+    }
+    return d;
+  };
 
-  const curves = curveRanges(compiled);
-  const arrows = document.querySelector<SVGGElement>('#curve-arrows');
-  if (arrows) {
-    arrows.replaceChildren();
-    const ns = 'http://www.w3.org/2000/svg';
-    curves.forEach((curve, groupIndex) => {
-      const span = curve.end - curve.start;
-      for (let i = 0; i < 5; i += 1) {
-        const p = sample(curve.start + span * (0.20 + i * 0.12));
-        const text = document.createElementNS(ns, 'text');
-        text.textContent = '›››';
-        text.setAttribute('x', p.x.toFixed(2));
-        text.setAttribute('y', p.y.toFixed(2));
-        text.setAttribute('class', `curve-chevron ${groupIndex % 2 === 0 ? 'cyan' : 'magenta'}`);
-        text.setAttribute('transform', `rotate(${(p.angle * 180 / Math.PI).toFixed(2)} ${p.x.toFixed(2)} ${p.y.toFixed(2)})`);
-        text.style.animationDelay = `${i * 105 + groupIndex * 30}ms`;
-        arrows.appendChild(text);
-      }
-    });
+  const stack = document.querySelector<HTMLDivElement>('#level-stack');
+  if (!stack) throw new Error('Missing #level-stack');
+  stack.replaceChildren();
+
+  const levelRenderers: LevelRenderer[] = [];
+  const levelSvgs = new Map<number, SVGSVGElement>();
+
+  setBoot(`BUILDING ${compiled.maxLevel + 1} LEVELS...`);
+
+  for (let level = 0; level <= compiled.maxLevel; level += 1) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${WIDTH} ${HEIGHT}`);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.setAttribute('class', 'track-level-svg');
+    svg.style.zIndex = String(level * 2);
+
+    const center = pathForLevel(level, 0);
+    const laneA = pathForLevel(level, -laneOffset);
+    const laneB = pathForLevel(level, laneOffset);
+    if (center) {
+      svg.appendChild(svgPath(center, '#4a25ff', 180, 0.08));
+      svg.appendChild(svgPath(center, '#182941', 164, 1));
+      svg.appendChild(svgPath(center, '#0d1625', 148, 0.98));
+      svg.appendChild(svgPath(center, '#174d74', 118, 0.18));
+      svg.appendChild(svgPath(laneA, '#010309', 7, 1));
+      svg.appendChild(svgPath(laneB, '#010309', 7, 1));
+      svg.appendChild(svgPath(laneA, '#83f8ff', 2.2, 0.96));
+      svg.appendChild(svgPath(laneB, '#ff72ee', 2.2, 0.90));
+    }
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.textContent = `LEVEL ${level}`;
+    label.setAttribute('x', String(1080));
+    label.setAttribute('y', String(55 + level * 22));
+    label.setAttribute('class', 'level-label');
+    svg.appendChild(label);
+
+    stack.appendChild(svg);
+    levelSvgs.set(level, svg);
+
+    const host = document.createElement('div');
+    host.className = 'pixi-level';
+    host.style.zIndex = String(level * 2 + 1);
+    stack.appendChild(host);
+    const app = await createPixiApp(host);
+    levelRenderers.push({ level, app });
   }
 
-  const decor = document.querySelector<SVGGElement>('#track-decor');
-  if (decor) {
-    decor.replaceChildren();
-    const ns = 'http://www.w3.org/2000/svg';
-    const addKerbRun = (start: number, end: number, side: -1 | 1, blocks: number): void => {
-      const blockSpan = (end - start) / blocks;
-      for (let i = 0; i < blocks; i += 1) {
-        const blockStart = start + blockSpan * i;
-        const blockEnd = blockStart + blockSpan * 0.92;
-        const kerb = document.createElementNS(ns, 'path');
-        kerb.setAttribute('d', sampledPath(side * (roadHalfWidth + 5), blockStart, blockEnd, 6));
-        kerb.setAttribute('fill', 'none');
-        kerb.setAttribute('stroke', i % 2 === 0 ? '#ff334f' : '#f5f8ff');
-        kerb.setAttribute('stroke-width', '11');
-        kerb.setAttribute('stroke-linecap', 'butt');
-        kerb.setAttribute('opacity', '.92');
-        decor.appendChild(kerb);
-      }
-    };
-    curves.forEach((curve) => {
-      const span = curve.end - curve.start;
-      const inside: -1 | 1 = curve.sign > 0 ? 1 : -1;
-      addKerbRun(curve.start + span * 0.08, curve.end - span * 0.10, inside, Math.max(8, Math.round(span / 22)));
-      addKerbRun(curve.end - span * 0.08, Math.min(sourceLength, curve.end + span * 0.12), inside === 1 ? -1 : 1, 5);
-    });
-  }
+  // Curves are always level in the JSON grammar, so their kerbs belong to one SVG level.
+  compiled.segments.filter((segment) => segment.type === 'curve').forEach((segment, curveIndex) => {
+    const svg = levelSvgs.get(segment.renderLevel);
+    if (!svg || segment.curveSign === 0) return;
+    const sign = segment.curveSign;
+    const interiorOffset = sign * (roadHalfWidth + 5);
+    const exteriorOffset = -interiorOffset;
+    const blocks = Math.max(8, Math.round((segment.end - segment.start) / 22));
+    const blockSpan = (segment.end - segment.start) / blocks;
+    for (let i = 0; i < blocks; i += 1) {
+      const start = segment.start + blockSpan * i;
+      const end = start + blockSpan * 0.90;
+      const kerb = svgPath(pathRange(start, end, interiorOffset, 5), i % 2 === 0 ? '#ff334f' : '#f5f8ff', 11, 0.92);
+      kerb.setAttribute('stroke-linecap', 'butt');
+      svg.appendChild(kerb);
+    }
+    const exitStart = segment.end - (segment.end - segment.start) * 0.20;
+    for (let i = 0; i < 5; i += 1) {
+      const start = exitStart + ((segment.end - exitStart) * i) / 5;
+      const end = exitStart + ((segment.end - exitStart) * (i + 0.88)) / 5;
+      const kerb = svgPath(pathRange(start, end, exteriorOffset, 5), i % 2 === 0 ? '#ff334f' : '#f5f8ff', 11, 0.88);
+      kerb.setAttribute('stroke-linecap', 'butt');
+      svg.appendChild(kerb);
+    }
 
-  const bridgeLayer = document.querySelector<SVGGElement>('#bridge-layer');
-  if (!bridgeLayer) throw new Error('Missing #bridge-layer');
-  bridgeLayer.replaceChildren();
-  const plateauStart = bridgeTopDistance - bridgePlateauHalf;
-  const plateauEnd = bridgeTopDistance + bridgePlateauHalf;
-  const rampStart = plateauStart - bridgeRampLength;
-  const rampEnd = plateauEnd + bridgeRampLength;
-  bridgeLayer.appendChild(createBridgePath(sampledPath(0, rampStart, rampEnd, 190, 14), '#00030a', definition.road.width + 8, 0.24, 'bridge-shadow'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(0, rampStart, rampEnd, 190), '#162337', definition.road.width, 0.18, 'bridge-ramp-deck'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(-roadHalfWidth, rampStart, rampEnd, 190), '#34b8c5', 3, 0.48, 'bridge-ramp-edge'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(roadHalfWidth, rampStart, rampEnd, 190), '#b53aa8', 3, 0.42, 'bridge-ramp-edge'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(0, plateauStart, plateauEnd, 100), '#111d2e', definition.road.width - 2, definition.bridge.opacity, 'bridge-deck'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(-roadHalfWidth, plateauStart, plateauEnd, 100), '#4cf4ff', 3.5, 0.92, 'bridge-edge'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(roadHalfWidth, plateauStart, plateauEnd, 100), '#ff54e7', 3.5, 0.82, 'bridge-edge'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(-laneOffset, plateauStart, plateauEnd, 100), '#b9fdff', 2.7, 1, 'bridge-rail'));
-  bridgeLayer.appendChild(createBridgePath(sampledPath(laneOffset, plateauStart, plateauEnd, 100), '#ff9bf3', 2.7, 0.96, 'bridge-rail'));
+    for (let i = 0; i < 5; i += 1) {
+      const p = sample(segment.start + (segment.end - segment.start) * (0.35 + i * 0.06), 0);
+      const text = document.createElementNS(SVG_NS, 'text');
+      text.textContent = '›››';
+      text.setAttribute('x', p.x.toFixed(2));
+      text.setAttribute('y', p.y.toFixed(2));
+      text.setAttribute('class', `curve-chevron ${curveIndex % 2 === 0 ? 'cyan' : 'magenta'}`);
+      text.setAttribute('transform', `rotate(${(p.angle * 180 / Math.PI).toFixed(2)} ${p.x.toFixed(2)} ${p.y.toFixed(2)})`);
+      text.style.animationDelay = `${i * 105}ms`;
+      svg.appendChild(text);
+    }
+  });
 
-  const bridgeEnterAt = bridgeTopDistance - bridgePlateauHalf - bridgeRampLength - BRIDGE_ENTRY_LEAD;
-  const bridgeExitAt = bridgeTopDistance + bridgePlateauHalf + bridgeRampLength + MAX_TRAIL_LENGTH;
+  // Give standardized up/down ramps a subtle shadow so the height change reads clearly.
+  compiled.segments.filter((segment) => segment.type === 'up' || segment.type === 'down').forEach((segment) => {
+    const svg = levelSvgs.get(segment.renderLevel);
+    if (!svg) return;
+    const shadow = svgPath(pathRange(segment.start, segment.end, 0, 60), '#00030a', 154, 0.22);
+    shadow.setAttribute('transform', 'translate(0 12)');
+    svg.insertBefore(shadow, svg.firstChild);
+  });
 
-  setBoot('TRACK JSON READY\nINITIALIZING TWO-PLAYER PIXI LAYERS...');
-  const underApp = await createLayer('pixi-under');
-  const overApp = await createLayer('pixi-over');
-  const uiApp = await createLayer('pixi-ui');
+  const uiHost = document.querySelector<HTMLDivElement>('#pixi-ui');
+  if (!uiHost) throw new Error('Missing #pixi-ui');
+  uiHost.style.zIndex = String(compiled.maxLevel * 2 + 3);
+  const uiApp = await createPixiApp(uiHost);
 
-  const makePlayer = (id: 1 | 2, name: string, color: number, playerLaneOffset: number, distance: number): Player => {
-    const underVisual = createPhotonVisual();
-    const overVisual = createPhotonVisual();
-    underApp.stage.addChild(underVisual.trail, underVisual.root);
-    overApp.stage.addChild(overVisual.trail, overVisual.root);
-    return { id, name, color, laneOffset: playerLaneOffset, distance, speed: 0, throttle: false, currentZ: 1, underVisual, overVisual };
+  const makePlayer = (id: 1 | 2, color: number, offset: number, distance: number): Player => {
+    const visuals = new Map<number, PhotonVisual>();
+    for (const renderer of levelRenderers) {
+      const visual = createPhotonVisual();
+      renderer.app.stage.addChild(visual.trail, visual.root);
+      visuals.set(renderer.level, visual);
+    }
+    return { id, color, laneOffset: offset, distance, speed: 0, throttle: false, visuals };
   };
 
   const players: Player[] = [
-    makePlayer(1, 'LEFT', 0x27e7ff, -laneOffset, 90),
-    makePlayer(2, 'RIGHT', 0xb76cff, laneOffset, 35),
+    makePlayer(1, 0x27e7ff, -laneOffset, 90),
+    makePlayer(2, 0xb76cff, laneOffset, 35),
   ];
 
   const hud = new Text({
     text: '',
-    style: new TextStyle({ fill: '#dffcff', fontSize: 16, fontFamily: 'monospace', lineHeight: 22 }),
+    style: new TextStyle({ fill: '#dffcff', fontSize: 15, fontFamily: 'monospace', lineHeight: 21 }),
   });
-  hud.position.set(26, 24);
+  hud.position.set(24, 22);
   uiApp.stage.addChild(hud);
 
   const note = new Text({
-    text: `${definition.name.toUpperCase()}   //   LEFT=CYAN   RIGHT=VIOLET`,
-    style: new TextStyle({ fill: '#72e9f7', fontSize: 13, fontFamily: 'Arial' }),
+    text: 'LEFT HALF = CYAN   //   RIGHT HALF = VIOLET   //   UP/DOWN ARE STANDARD TRACK SLOTS',
+    style: new TextStyle({ fill: '#72e9f7', fontSize: 12, fontFamily: 'Arial' }),
   });
-  note.position.set(26, HEIGHT - 38);
+  note.position.set(24, HEIGHT - 34);
   uiApp.stage.addChild(note);
 
   boot?.remove();
@@ -481,8 +493,7 @@ async function main(): Promise<void> {
   uiCanvas.addEventListener('pointerdown', (event) => {
     uiCanvas.setPointerCapture?.(event.pointerId);
     const rect = uiCanvas.getBoundingClientRect();
-    const localX = event.clientX - rect.left;
-    if (localX < rect.width / 2) leftPointers.add(event.pointerId);
+    if (event.clientX - rect.left < rect.width / 2) leftPointers.add(event.pointerId);
     else rightPointers.add(event.pointerId);
     refreshThrottle();
   });
@@ -494,23 +505,26 @@ async function main(): Promise<void> {
   window.addEventListener('pointerup', releasePointer);
   window.addEventListener('pointercancel', releasePointer);
 
-  const renderVisual = (player: Player, visual: PhotonVisual, p: TrackPoint, ratio: number, active: boolean): void => {
-    visual.root.visible = active;
-    visual.trail.visible = active;
-    if (!active) return;
-    visual.root.position.set(p.x, p.y);
-    visual.root.rotation = p.angle;
-    visual.root.alpha = p.underBridge ? 0.45 : 1;
-    rebuildPhoton(visual, ratio, player.color);
-    visual.trail.clear();
-    if (ratio <= 0.02) return;
-    const wakeLength = (40 + ratio * 520) * TRAIL_SCALE;
-    const points: TrackPoint[] = [];
-    for (let i = 24; i >= 0; i -= 1) points.push(sample(player.distance - wakeLength * (i / 24), player.laneOffset));
-    const alphaScale = p.underBridge ? 0.38 : 1;
-    drawOpenPath(visual.trail, points, 28 + ratio * 12, player.color, (0.07 + ratio * 0.04) * alphaScale);
-    drawOpenPath(visual.trail, points, 11 + ratio * 7, player.color, (0.18 + ratio * 0.11) * alphaScale);
-    drawOpenPath(visual.trail, points, 3 + ratio * 3, 0xe9ffff, (0.64 + ratio * 0.22) * alphaScale);
+  const renderPlayer = (player: Player, p: TrackPoint, ratio: number): void => {
+    for (const [level, visual] of player.visuals) {
+      const active = level === p.renderLevel;
+      visual.root.visible = active;
+      visual.trail.visible = active;
+      if (!active) continue;
+      visual.root.position.set(p.x, p.y);
+      visual.root.rotation = p.angle;
+      rebuildPhoton(visual, ratio, player.color);
+      visual.trail.clear();
+      if (ratio <= 0.02) continue;
+      const wakeLength = (40 + ratio * 520) * TRAIL_SCALE;
+      const points: TrackPoint[] = [];
+      for (let i = 24; i >= 0; i -= 1) {
+        points.push(sample(player.distance - wakeLength * (i / 24), player.laneOffset));
+      }
+      drawOpenPath(visual.trail, points, 28 + ratio * 12, player.color, 0.07 + ratio * 0.04);
+      drawOpenPath(visual.trail, points, 11 + ratio * 7, player.color, 0.18 + ratio * 0.11);
+      drawOpenPath(visual.trail, points, 3 + ratio * 3, 0xe9ffff, 0.64 + ratio * 0.22);
+    }
   };
 
   let frames = 0;
@@ -520,11 +534,8 @@ async function main(): Promise<void> {
   let maxWindow = 0;
   let lastTime = performance.now();
 
-  const inBridgeRenderZone = (distance: number): boolean => {
-    const d = wrap(distance);
-    if (bridgeEnterAt <= bridgeExitAt) return d >= bridgeEnterAt && d <= bridgeExitAt;
-    return d >= bridgeEnterAt || d <= bridgeExitAt;
-  };
+  const sameLevelCrossings = compiled.crossings.filter((crossing) => crossing.mode === 'crossing').length;
+  const overpasses = compiled.crossings.filter((crossing) => crossing.mode === 'overpass').length;
 
   const tick = (now: number): void => {
     const deltaMs = Math.min(now - lastTime, 40);
@@ -535,15 +546,11 @@ async function main(): Promise<void> {
       player.speed += (player.throttle ? PHYSICS.acceleration : -PHYSICS.coastDrag) * dt;
       player.speed = Math.max(0, Math.min(PHYSICS.maxSpeed, player.speed));
       player.distance = wrap(player.distance + player.speed * dt);
-      player.currentZ = inBridgeRenderZone(player.distance) ? 3 : 1;
       const p = sample(player.distance, player.laneOffset);
-      const ratio = clamp01(player.speed / PHYSICS.maxSpeed);
-      renderVisual(player, player.underVisual, p, ratio, player.currentZ === 1);
-      renderVisual(player, player.overVisual, p, ratio, player.currentZ === 3);
+      renderPlayer(player, p, clamp01(player.speed / PHYSICS.maxSpeed));
     }
 
-    underApp.renderer.render(underApp.stage);
-    overApp.renderer.render(overApp.stage);
+    for (const renderer of levelRenderers) renderer.app.renderer.render(renderer.app.stage);
 
     frames += 1;
     elapsed += deltaMs;
@@ -561,7 +568,7 @@ async function main(): Promise<void> {
 
     const p1 = sample(players[0].distance, players[0].laneOffset);
     const p2 = sample(players[1].distance, players[1].laneOffset);
-    hud.text = `TRACK ${definition.id}  ${Math.round(sourceLength)}m  CROSSINGS ${compiled.crossings.length}\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nCYAN   ${Math.round(players[0].speed * 0.82)}   Z${players[0].currentZ} H${p1.elevation.toFixed(0)} ${players[0].throttle ? 'THRUST' : 'COAST'}\nVIOLET ${Math.round(players[1].speed * 0.82)}   Z${players[1].currentZ} H${p2.elevation.toFixed(0)} ${players[1].throttle ? 'THRUST' : 'COAST'}`;
+    hud.text = `TRACK ${definition.id}  ${Math.round(totalLength)}m  LEVELS ${compiled.maxLevel + 1}\nFPS ${fps.toFixed(1)}   FRAME ${deltaMs.toFixed(1)} ms   MAX ${maxFrame.toFixed(1)}\nCROSSINGS ${sameLevelCrossings}   OVERPASSES ${overpasses}\nCYAN   ${Math.round(players[0].speed * 0.82)}   L${p1.level} RZ${p1.renderLevel * 2 + 1} H${p1.elevation.toFixed(0)}\nVIOLET ${Math.round(players[1].speed * 0.82)}   L${p2.level} RZ${p2.renderLevel * 2 + 1} H${p2.elevation.toFixed(0)}`;
     uiApp.renderer.render(uiApp.stage);
     requestAnimationFrame(tick);
   };
