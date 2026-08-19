@@ -148,13 +148,10 @@ function drawCube3d(visual: PhotonVisual, baseColor: number, yaw: number, pitch:
   const sp = Math.sin(pitch);
 
   const projected = vertices.map((v): Point => {
-    // Positive pitch raises the front (+local x), matching an uphill ramp.
     const pitchedX = v.x * cp - v.z * sp;
     const pitchedZ = v.x * sp + v.z * cp;
     const worldX = pitchedX * cy - v.y * sy;
     const worldY = pitchedX * sy + v.y * cy;
-
-    // Use exactly the same linear isometric projection as the track.
     return {
       x: worldX * 0.78 - worldY * 0.52,
       y: worldX * 0.26 + worldY * 0.36 - pitchedZ * 1.05,
@@ -188,9 +185,6 @@ function drawCube3d(visual: PhotonVisual, baseColor: number, yaw: number, pitch:
 
   visual.cube.clear();
   for (const face of sideFaces) drawFace(face.ids, face.color, 0.30 + ratio * 0.22);
-
-  // The top must be painted last; sorting it with the side faces could hide it
-  // behind an opaque side and make the cube look hollow.
   drawFace([4, 5, 6, 7], scaleColor(baseColor, 1.20), 0.48 + ratio * 0.26);
 }
 
@@ -467,6 +461,7 @@ async function main(): Promise<void> {
     host.style.zIndex = String(level * 2 + 1);
     stack.appendChild(host);
     const app = await createPixiApp(host);
+    app.stage.sortableChildren = true;
     levelRenderers.push({ level, app });
   }
 
@@ -495,6 +490,8 @@ async function main(): Promise<void> {
     const visuals = new Map<number, PhotonVisual>();
     for (const renderer of levelRenderers) {
       const visual = createPhotonVisual(color);
+      visual.trail.zIndex = 0;
+      visual.root.zIndex = 10000;
       renderer.app.stage.addChild(visual.trail, visual.root);
       visuals.set(renderer.level, visual);
     }
@@ -591,6 +588,7 @@ async function main(): Promise<void> {
     const dz = ahead.elevation - behind.elevation;
     const horizontal = Math.hypot(worldDx, worldDy) || look * 2;
     const pitch = Math.atan2(dz, horizontal);
+    const horizontalDepth = p.worldX * 0.26 + p.worldY * 0.36;
 
     for (const [level, visual] of player.visuals) {
       const active = level === p.renderLevel;
@@ -600,6 +598,7 @@ async function main(): Promise<void> {
 
       visual.root.position.set(p.x, p.y - 3);
       visual.root.rotation = 0;
+      visual.root.zIndex = 10000 + horizontalDepth;
       const scale = 0.78 + ratio * 0.07;
       visual.root.scale.set(scale);
       visual.glow.alpha = 0.62 + ratio * 0.28;
