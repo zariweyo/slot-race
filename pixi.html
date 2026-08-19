@@ -16,11 +16,6 @@
               <stop offset="0.52" stop-color="#07111f" />
               <stop offset="1" stop-color="#010207" />
             </radialGradient>
-            <linearGradient id="roadGradient" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#17243a" />
-              <stop offset="0.5" stop-color="#090f1b" />
-              <stop offset="1" stop-color="#131d31" />
-            </linearGradient>
             <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="7" result="blur" />
               <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -39,7 +34,49 @@
 
         <div id="level-stack" class="level-stack"></div>
         <div id="pixi-ui" class="pixi-ui"></div>
+        <button id="track-editor-open" class="track-editor-open" type="button">EDITOR DE PISTA</button>
         <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
+      </div>
+
+      <div id="track-editor-modal" class="track-editor-modal" aria-hidden="true">
+        <section class="track-editor-panel" role="dialog" aria-modal="true" aria-labelledby="track-editor-title">
+          <header class="track-editor-header">
+            <div>
+              <div class="track-editor-kicker">PHOTON CIRCUIT</div>
+              <h2 id="track-editor-title">Editor de pista</h2>
+            </div>
+            <button id="track-editor-close" class="track-editor-close" type="button" aria-label="Cerrar">×</button>
+          </header>
+
+          <div class="track-editor-meta">
+            <label>Nombre<input id="track-editor-name" type="text" /></label>
+            <label>ID<input id="track-editor-id" type="text" /></label>
+          </div>
+
+          <div class="track-editor-toolbar">
+            <select id="track-editor-add-type">
+              <option value="straight">Straight</option>
+              <option value="curve">Curve</option>
+              <option value="up">Up</option>
+              <option value="down">Down</option>
+            </select>
+            <button id="track-editor-add" type="button">+ Añadir slot</button>
+          </div>
+
+          <div class="track-editor-columns">
+            <span>#</span><span>Tipo</span><span>Parámetros</span><span></span>
+          </div>
+          <div id="track-editor-list" class="track-editor-list"></div>
+
+          <footer class="track-editor-footer">
+            <div class="track-editor-load-group">
+              <select id="track-editor-load-select"></select>
+              <button id="track-editor-load" type="button">Cargar</button>
+            </div>
+            <div id="track-editor-status" class="track-editor-status">Circuito actual</div>
+            <button id="track-editor-save" class="primary" type="button">Guardar y aplicar</button>
+          </footer>
+        </section>
       </div>
     </div>
     <script type="module" src="/src/pixi-main.ts"></script>
