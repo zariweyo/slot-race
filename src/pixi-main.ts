@@ -196,6 +196,16 @@ function svgPath(d: string, stroke: string, width: number, opacity: number, line
   return path;
 }
 
+function neonKerb(d: string): SVGPathElement[] {
+  const red = svgPath(d, '#ff2945', 6, 0.96, 'butt');
+  const white = svgPath(d, '#f7fbff', 6, 1, 'butt');
+  white.setAttribute('stroke-dasharray', '24 24');
+  white.setAttribute('stroke-dashoffset', '0');
+  red.style.filter = 'drop-shadow(0 0 5px rgba(255,41,69,.8))';
+  white.style.filter = 'drop-shadow(0 0 5px rgba(255,255,255,.9))';
+  return [red, white];
+}
+
 async function main(): Promise<void> {
   setBoot('LOADING TRACK...');
 
@@ -346,16 +356,6 @@ async function main(): Promise<void> {
     return d;
   };
 
-  const pathRange = (start: number, end: number, offset: number, samples = 24): string => {
-    let d = '';
-    for (let i = 0; i <= samples; i += 1) {
-      const at = start + ((end - start) * i) / samples;
-      const p = sample(at, offset);
-      d += `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
-    }
-    return d;
-  };
-
   const stack = document.querySelector<HTMLDivElement>('#level-stack');
   if (!stack) throw new Error('Missing #level-stack');
   stack.replaceChildren();
@@ -381,8 +381,8 @@ async function main(): Promise<void> {
       svg.appendChild(svgPath(center, '#4a25ff', 160, 0.035));
       svg.appendChild(svgPath(center, '#0d1625', 148, 0.76));
       svg.appendChild(svgPath(center, '#174d74', 118, 0.10));
-      svg.appendChild(svgPath(leftEdge, '#50e7f3', 4, 0.58, 'round'));
-      svg.appendChild(svgPath(rightEdge, '#d94fc8', 4, 0.52, 'round'));
+      for (const edge of neonKerb(leftEdge)) svg.appendChild(edge);
+      for (const edge of neonKerb(rightEdge)) svg.appendChild(edge);
       svg.appendChild(svgPath(laneA, '#010309', 7, 0.82, 'round'));
       svg.appendChild(svgPath(laneB, '#010309', 7, 0.82, 'round'));
       svg.appendChild(svgPath(laneA, '#83f8ff', 2.2, 0.90, 'round'));
@@ -403,25 +403,6 @@ async function main(): Promise<void> {
   compiled.segments.filter((segment) => segment.type === 'curve').forEach((segment, curveIndex) => {
     const svg = levelSvgs.get(segment.renderLevel);
     if (!svg || segment.curveSign === 0) return;
-    const sign = segment.curveSign;
-    const interiorOffset = sign * (roadHalfWidth + 5);
-    const exteriorOffset = -interiorOffset;
-    const blocks = Math.max(8, Math.round((segment.end - segment.start) / 22));
-    const blockSpan = (segment.end - segment.start) / blocks;
-    for (let i = 0; i < blocks; i += 1) {
-      const start = segment.start + blockSpan * i;
-      const end = start + blockSpan * 0.90;
-      const kerb = svgPath(pathRange(start, end, interiorOffset, 5), i % 2 === 0 ? '#ff334f' : '#f5f8ff', 11, 0.92);
-      svg.appendChild(kerb);
-    }
-    const exitStart = segment.end - (segment.end - segment.start) * 0.20;
-    for (let i = 0; i < 5; i += 1) {
-      const start = exitStart + ((segment.end - exitStart) * i) / 5;
-      const end = exitStart + ((segment.end - exitStart) * (i + 0.88)) / 5;
-      const kerb = svgPath(pathRange(start, end, exteriorOffset, 5), i % 2 === 0 ? '#ff334f' : '#f5f8ff', 11, 0.88);
-      svg.appendChild(kerb);
-    }
-
     for (let i = 0; i < 5; i += 1) {
       const p = sample(segment.start + (segment.end - segment.start) * (0.35 + i * 0.06), 0);
       const text = document.createElementNS(SVG_NS, 'text');
