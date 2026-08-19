@@ -38,11 +38,11 @@ type TrackPoint = Point & {
   segmentType: WorldPoint['segmentType'];
   curveSign: -1 | 0 | 1;
   curvature: number;
+  worldX: number;
+  worldY: number;
 };
 
 type CachePoint = TrackPoint & {
-  worldX: number;
-  worldY: number;
   worldNx: number;
   worldNy: number;
 };
@@ -148,42 +148,50 @@ function drawCube3d(visual: PhotonVisual, baseColor: number, yaw: number, pitch:
   const sp = Math.sin(pitch);
 
   const projected = vertices.map((v): Point => {
-    const pitchedX = v.x * cp + v.z * sp;
-    const pitchedZ = -v.x * sp + v.z * cp;
-    const sx = pitchedX * cy - v.y * sy;
-    const syScreen = pitchedX * sy + v.y * cy;
+    // Positive pitch raises the front (+local x), matching an uphill ramp.
+    const pitchedX = v.x * cp - v.z * sp;
+    const pitchedZ = v.x * sp + v.z * cp;
+    const worldX = pitchedX * cy - v.y * sy;
+    const worldY = pitchedX * sy + v.y * cy;
+
+    // Use exactly the same linear isometric projection as the track.
     return {
-      x: sx,
-      y: syScreen * 0.46 - pitchedZ * 0.92,
+      x: worldX * 0.78 - worldY * 0.52,
+      y: worldX * 0.26 + worldY * 0.36 - pitchedZ * 1.05,
     };
   });
 
-  const faces = [
-    { ids: [4, 5, 6, 7], color: scaleColor(baseColor, 1.20) },
+  const sideFaces = [
     { ids: [0, 1, 5, 4], color: scaleColor(baseColor, 0.72) },
     { ids: [1, 2, 6, 5], color: scaleColor(baseColor, 0.50) },
     { ids: [2, 3, 7, 6], color: scaleColor(baseColor, 0.62) },
     { ids: [3, 0, 4, 7], color: scaleColor(baseColor, 0.82) },
   ];
 
-  faces.sort((a, b) => {
+  sideFaces.sort((a, b) => {
     const ay = a.ids.reduce((sum, id) => sum + projected[id].y, 0) / a.ids.length;
     const by = b.ids.reduce((sum, id) => sum + projected[id].y, 0) / b.ids.length;
     return ay - by;
   });
 
-  visual.cube.clear();
-  for (const face of faces) {
-    const first = projected[face.ids[0]];
+  const drawFace = (ids: number[], color: number, edgeAlpha: number): void => {
+    const first = projected[ids[0]];
     visual.cube.moveTo(first.x, first.y);
-    for (let i = 1; i < face.ids.length; i += 1) {
-      const p = projected[face.ids[i]];
+    for (let i = 1; i < ids.length; i += 1) {
+      const p = projected[ids[i]];
       visual.cube.lineTo(p.x, p.y);
     }
     visual.cube.lineTo(first.x, first.y);
-    visual.cube.fill({ color: face.color, alpha: 0.98 });
-    visual.cube.stroke({ width: 1.2, color: 0xffffff, alpha: 0.30 + ratio * 0.25 });
-  }
+    visual.cube.fill({ color, alpha: 0.98 });
+    visual.cube.stroke({ width: 1.2, color: 0xffffff, alpha: edgeAlpha });
+  };
+
+  visual.cube.clear();
+  for (const face of sideFaces) drawFace(face.ids, face.color, 0.30 + ratio * 0.22);
+
+  // The top must be painted last; sorting it with the side faces could hide it
+  // behind an opaque side and make the cube look hollow.
+  drawFace([4, 5, 6, 7], scaleColor(baseColor, 1.20), 0.48 + ratio * 0.26);
 }
 
 async function createPixiApp(host: HTMLElement): Promise<Application> {
@@ -374,15 +382,17 @@ async function main(): Promise<void> {
     let angleDelta = b.angle - a.angle;
     if (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
     if (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
-    const worldX = lerp(a.worldX, b.worldX);
-    const worldY = lerp(a.worldY, b.worldY);
+    const centerWorldX = lerp(a.worldX, b.worldX);
+    const centerWorldY = lerp(a.worldY, b.worldY);
     let worldNx = lerp(a.worldNx, b.worldNx);
     let worldNy = lerp(a.worldNy, b.worldNy);
     const normalMag = Math.hypot(worldNx, worldNy) || 1;
     worldNx /= normalMag;
     worldNy /= normalMag;
+    const worldX = centerWorldX + worldNx * offset;
+    const worldY = centerWorldY + worldNy * offset;
     const elevation = lerp(a.elevation, b.elevation);
-    const projected = projectIso(worldX + worldNx * offset, worldY + worldNy * offset, elevation);
+    const projected = projectIso(worldX, worldY, elevation);
     return {
       x: projected.x,
       y: projected.y,
@@ -395,6 +405,8 @@ async function main(): Promise<void> {
       segmentType: nearest.segmentType,
       curveSign: nearest.curveSign,
       curvature: nearest.curvature,
+      worldX,
+      worldY,
     };
   };
 
@@ -573,11 +585,12 @@ async function main(): Promise<void> {
     const look = 14;
     const behind = sample(player.distance - look, player.laneOffset);
     const ahead = sample(player.distance + look, player.laneOffset);
-    const dx = ahead.x - behind.x;
-    const dy = ahead.y - behind.y;
-    const yaw = Math.atan2(dy, dx);
+    const worldDx = ahead.worldX - behind.worldX;
+    const worldDy = ahead.worldY - behind.worldY;
+    const yaw = Math.atan2(worldDy, worldDx);
     const dz = ahead.elevation - behind.elevation;
-    const pitch = Math.atan2(dz, look * 2);
+    const horizontal = Math.hypot(worldDx, worldDy) || look * 2;
+    const pitch = Math.atan2(dz, horizontal);
 
     for (const [level, visual] of player.visuals) {
       const active = level === p.renderLevel;
