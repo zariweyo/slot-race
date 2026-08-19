@@ -25,6 +25,7 @@ function createNewTrack(current: TrackDefinition): TrackDefinition {
     version: current.version,
     id: `track-${stamp}`,
     name: 'Nuevo circuito',
+    speedMultiplier: 1,
     closed: true,
     autoClose: true,
     start: { x: 0, y: 0, heading: 0, level: 0 },
@@ -52,9 +53,10 @@ export function setupTrackEditor(options: EditorOptions): void {
   const loadButton = document.querySelector<HTMLButtonElement>('#track-editor-load');
   const nameInput = document.querySelector<HTMLInputElement>('#track-editor-name');
   const idInput = document.querySelector<HTMLInputElement>('#track-editor-id');
+  const speedInput = document.querySelector<HTMLInputElement>('#track-editor-speed');
   const status = document.querySelector<HTMLDivElement>('#track-editor-status');
 
-  if (!openButton || !modal || !closeButton || !list || !newButton || !addSelect || !addButton || !saveButton || !loadSelect || !loadButton || !nameInput || !idInput || !status) {
+  if (!openButton || !modal || !closeButton || !list || !newButton || !addSelect || !addButton || !saveButton || !loadSelect || !loadButton || !nameInput || !idInput || !speedInput || !status) {
     console.warn('Track editor markup is incomplete');
     return;
   }
@@ -69,6 +71,7 @@ export function setupTrackEditor(options: EditorOptions): void {
   const render = (): void => {
     nameInput.value = draft.name;
     idInput.value = draft.id;
+    speedInput.value = String(draft.speedMultiplier ?? 1);
     list.replaceChildren();
 
     draft.segments.forEach((segment, index) => {
@@ -197,6 +200,7 @@ export function setupTrackEditor(options: EditorOptions): void {
     try {
       draft.name = nameInput.value.trim() || 'Untitled Track';
       draft.id = idInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '-') || `track-${Date.now()}`;
+      draft.speedMultiplier = Math.max(0.1, Number(speedInput.value) || 1);
       compileTrack(draft, 8);
       await saveTrack(draft);
       setActiveTrackId(draft.id);
