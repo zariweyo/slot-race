@@ -17,7 +17,7 @@
   },
   "levels": {
     "height": 88,
-    "rampLength": 235
+    "rampLength": 520
   },
   "segments": [
     { "type": "straight", "length": 330 },
