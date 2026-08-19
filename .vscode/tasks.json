@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "vite: dev",
+      "type": "process",
+      "command": "/Users/danielcanetecampos/.nvm/versions/node/v22.12.0/bin/npm",
+      "args": [
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "options": {
+        "env": {
+          "PATH": "/Users/danielcanetecampos/.nvm/versions/node/v22.12.0/bin:${env:PATH}"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Local:\\s+http://127\\.0\\.0\\.1:5173/"
+        }
+      }
+    }
+  ]
+}

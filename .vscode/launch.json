@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Slot Race: Pixi",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:5173/slot-race/pixi.html",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev",
+      "sourceMaps": true
+    },
+    {
+      "name": "Slot Race: Main",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:5173/slot-race/",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev",
+      "sourceMaps": true
+    }
+  ]
+}
