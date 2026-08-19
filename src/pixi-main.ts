@@ -148,7 +148,6 @@ function drawCube3d(visual: PhotonVisual, baseColor: number, yaw: number, pitch:
   const sp = Math.sin(pitch);
 
   const projected = vertices.map((v): Point => {
-    // Local x = forward, local y = lateral, z = vertical.
     const pitchedX = v.x * cp + v.z * sp;
     const pitchedZ = -v.x * sp + v.z * cp;
     const sx = pitchedX * cy - v.y * sy;
@@ -167,7 +166,6 @@ function drawCube3d(visual: PhotonVisual, baseColor: number, yaw: number, pitch:
     { ids: [3, 0, 4, 7], color: scaleColor(baseColor, 0.82) },
   ];
 
-  // Painter sort by average screen y; only five quads, so this is negligible.
   faces.sort((a, b) => {
     const ay = a.ids.reduce((sum, id) => sum + projected[id].y, 0) / a.ids.length;
     const by = b.ids.reduce((sum, id) => sum + projected[id].y, 0) / b.ids.length;
@@ -285,6 +283,7 @@ async function main(): Promise<void> {
   });
 
   const totalLength = compiled.totalLength;
+  const speedMultiplier = definition.speedMultiplier ?? 1;
   const wrap = (distance: number): number => ((distance % totalLength) + totalLength) % totalLength;
   const laneOffset = definition.road.laneSpacing / 2;
   const roadHalfWidth = definition.road.width / 2;
@@ -623,7 +622,7 @@ async function main(): Promise<void> {
       const beforeDistance = player.distance;
       const before = sample(beforeDistance, player.laneOffset);
       const laneScale = Math.max(0.15, 1 - before.curvature * player.laneOffset);
-      const centerAdvance = (player.speed / laneScale) * dt;
+      const centerAdvance = (player.speed / laneScale) * speedMultiplier * dt;
       const unwrappedDistance = beforeDistance + centerAdvance;
       const crossedStart = unwrappedDistance >= totalLength;
       player.distance = wrap(unwrappedDistance);
