@@ -6,10 +6,7 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     rollupOptions: {
-      input: {
-        main: 'index.html',
-        pixi: 'pixi.html',
-      },
+      input: 'index.html',
       output: {
         manualChunks: {
           pixijs: ['pixi.js'],
