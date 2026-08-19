@@ -100,8 +100,8 @@ function projectIso(x: number, y: number, z = 0): Point {
   const dx = x - 640;
   const dy = y - 360;
   return {
-    x: 640 + dx * 0.86 - dy * 0.42,
-    y: 385 + dx * 0.20 + dy * 0.48 - z * 0.90,
+    x: 640 + dx * 0.78 - dy * 0.52,
+    y: 385 + dx * 0.26 + dy * 0.36 - z * 1.05,
   };
 }
 
@@ -182,16 +182,15 @@ function worldAt(compiled: CompiledTrack, distance: number): WorldPoint {
   };
 }
 
-function svgPath(d: string, stroke: string, width: number, opacity: number, filter?: string): SVGPathElement {
+function svgPath(d: string, stroke: string, width: number, opacity: number, lineCap: 'butt' | 'round' = 'butt'): SVGPathElement {
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', d);
   path.setAttribute('fill', 'none');
   path.setAttribute('stroke', stroke);
   path.setAttribute('stroke-width', String(width));
-  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linecap', lineCap);
   path.setAttribute('stroke-linejoin', 'round');
   path.setAttribute('opacity', String(opacity));
-  if (filter) path.setAttribute('filter', filter);
   return path;
 }
 
@@ -211,7 +210,7 @@ async function main(): Promise<void> {
   );
   const worldWidth = Math.max(1, bounds.maxX - bounds.minX);
   const worldHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const fitScale = Math.min(900 / worldWidth, 500 / worldHeight);
+  const fitScale = Math.min(980 / worldWidth, 560 / worldHeight);
   const worldCenterX = (bounds.minX + bounds.maxX) / 2;
   const worldCenterY = (bounds.minY + bounds.maxY) / 2;
   const toCanvasWorld = (x: number, y: number): Point => ({
@@ -355,25 +354,21 @@ async function main(): Promise<void> {
     svg.style.zIndex = String(level * 2);
 
     const center = pathForLevel(level, 0);
+    const leftEdge = pathForLevel(level, -roadHalfWidth);
+    const rightEdge = pathForLevel(level, roadHalfWidth);
     const laneA = pathForLevel(level, -laneOffset);
     const laneB = pathForLevel(level, laneOffset);
     if (center) {
-      svg.appendChild(svgPath(center, '#4a25ff', 180, 0.08));
-      svg.appendChild(svgPath(center, '#182941', 164, 1));
-      svg.appendChild(svgPath(center, '#0d1625', 148, 0.98));
-      svg.appendChild(svgPath(center, '#174d74', 118, 0.18));
-      svg.appendChild(svgPath(laneA, '#010309', 7, 1));
-      svg.appendChild(svgPath(laneB, '#010309', 7, 1));
-      svg.appendChild(svgPath(laneA, '#83f8ff', 2.2, 0.96));
-      svg.appendChild(svgPath(laneB, '#ff72ee', 2.2, 0.90));
+      svg.appendChild(svgPath(center, '#4a25ff', 160, 0.035));
+      svg.appendChild(svgPath(center, '#0d1625', 148, 0.76));
+      svg.appendChild(svgPath(center, '#174d74', 118, 0.10));
+      svg.appendChild(svgPath(leftEdge, '#50e7f3', 4, 0.58, 'round'));
+      svg.appendChild(svgPath(rightEdge, '#d94fc8', 4, 0.52, 'round'));
+      svg.appendChild(svgPath(laneA, '#010309', 7, 0.82, 'round'));
+      svg.appendChild(svgPath(laneB, '#010309', 7, 0.82, 'round'));
+      svg.appendChild(svgPath(laneA, '#83f8ff', 2.2, 0.90, 'round'));
+      svg.appendChild(svgPath(laneB, '#ff72ee', 2.2, 0.86, 'round'));
     }
-
-    const label = document.createElementNS(SVG_NS, 'text');
-    label.textContent = `LEVEL ${level}`;
-    label.setAttribute('x', String(1080));
-    label.setAttribute('y', String(55 + level * 22));
-    label.setAttribute('class', 'level-label');
-    svg.appendChild(label);
 
     stack.appendChild(svg);
     levelSvgs.set(level, svg);
@@ -386,7 +381,6 @@ async function main(): Promise<void> {
     levelRenderers.push({ level, app });
   }
 
-  // Curves are always level in the JSON grammar, so their kerbs belong to one SVG level.
   compiled.segments.filter((segment) => segment.type === 'curve').forEach((segment, curveIndex) => {
     const svg = levelSvgs.get(segment.renderLevel);
     if (!svg || segment.curveSign === 0) return;
@@ -399,7 +393,6 @@ async function main(): Promise<void> {
       const start = segment.start + blockSpan * i;
       const end = start + blockSpan * 0.90;
       const kerb = svgPath(pathRange(start, end, interiorOffset, 5), i % 2 === 0 ? '#ff334f' : '#f5f8ff', 11, 0.92);
-      kerb.setAttribute('stroke-linecap', 'butt');
       svg.appendChild(kerb);
     }
     const exitStart = segment.end - (segment.end - segment.start) * 0.20;
@@ -407,7 +400,6 @@ async function main(): Promise<void> {
       const start = exitStart + ((segment.end - exitStart) * i) / 5;
       const end = exitStart + ((segment.end - exitStart) * (i + 0.88)) / 5;
       const kerb = svgPath(pathRange(start, end, exteriorOffset, 5), i % 2 === 0 ? '#ff334f' : '#f5f8ff', 11, 0.88);
-      kerb.setAttribute('stroke-linecap', 'butt');
       svg.appendChild(kerb);
     }
 
@@ -422,15 +414,6 @@ async function main(): Promise<void> {
       text.style.animationDelay = `${i * 105}ms`;
       svg.appendChild(text);
     }
-  });
-
-  // Give standardized up/down ramps a subtle shadow so the height change reads clearly.
-  compiled.segments.filter((segment) => segment.type === 'up' || segment.type === 'down').forEach((segment) => {
-    const svg = levelSvgs.get(segment.renderLevel);
-    if (!svg) return;
-    const shadow = svgPath(pathRange(segment.start, segment.end, 0, 60), '#00030a', 154, 0.22);
-    shadow.setAttribute('transform', 'translate(0 12)');
-    svg.insertBefore(shadow, svg.firstChild);
   });
 
   const uiHost = document.querySelector<HTMLDivElement>('#pixi-ui');
@@ -461,7 +444,7 @@ async function main(): Promise<void> {
   uiApp.stage.addChild(hud);
 
   const note = new Text({
-    text: 'LEFT HALF = CYAN   //   RIGHT HALF = VIOLET   //   UP/DOWN ARE STANDARD TRACK SLOTS',
+    text: 'LEFT HALF = CYAN   //   RIGHT HALF = VIOLET   //   MULTI-LEVEL CYCLIC TRACK',
     style: new TextStyle({ fill: '#72e9f7', fontSize: 12, fontFamily: 'Arial' }),
   });
   note.position.set(24, HEIGHT - 34);
