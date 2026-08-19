@@ -16,6 +16,9 @@ body {
   -webkit-user-select: none;
 }
 
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+
 .game-shell {
   width: 100%;
   height: 100%;
@@ -46,24 +49,10 @@ body {
   height: 100%;
 }
 
-.background-svg {
-  z-index: -1;
-  pointer-events: none;
-}
-
-.level-stack {
-  z-index: 0;
-  pointer-events: none;
-}
-
-.track-level-svg,
-.pixi-level {
-  pointer-events: none;
-}
-
-.pixi-ui {
-  pointer-events: auto;
-}
+.background-svg { z-index: -1; pointer-events: none; }
+.level-stack { z-index: 0; pointer-events: none; }
+.track-level-svg, .pixi-level { pointer-events: none; }
+.pixi-ui { pointer-events: auto; }
 
 .pixi-level canvas,
 .pixi-ui canvas {
@@ -101,11 +90,167 @@ body {
 .curve-chevron.cyan { fill: #59f8ff; filter: url(#cyanGlow); }
 .curve-chevron.magenta { fill: #ff58e9; filter: url(#magentaGlow); }
 
-.level-label {
-  fill: #dffcff;
-  font: 700 18px monospace;
-  opacity: .22;
+.track-editor-open {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  z-index: 1200;
+  border: 1px solid rgba(101, 240, 255, .6);
+  border-radius: 8px;
+  padding: 9px 13px;
+  background: rgba(4, 14, 27, .82);
+  color: #aaf9ff;
+  font: 700 12px monospace;
+  letter-spacing: 1px;
+  backdrop-filter: blur(8px);
+}
+
+.track-editor-open:hover { background: rgba(12, 35, 54, .92); }
+
+.track-editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0, 2, 8, .78);
+  backdrop-filter: blur(8px);
+  touch-action: auto;
+  user-select: text;
+}
+
+.track-editor-modal.open { display: flex; }
+
+.track-editor-panel {
+  width: min(980px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(91, 236, 255, .45);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(9, 23, 39, .98), rgba(3, 8, 18, .99));
+  box-shadow: 0 24px 90px rgba(0, 0, 0, .58), 0 0 45px rgba(48, 220, 255, .08);
+}
+
+.track-editor-header,
+.track-editor-footer,
+.track-editor-toolbar,
+.track-editor-meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.track-editor-header {
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.track-editor-kicker {
+  color: #63edf9;
+  font: 700 10px monospace;
   letter-spacing: 2px;
+}
+
+.track-editor-header h2 { margin: 3px 0 0; font-size: 22px; }
+.track-editor-close { border: 0; background: transparent; color: #fff; font-size: 28px; }
+
+.track-editor-meta {
+  padding: 14px 20px 8px;
+}
+
+.track-editor-meta label {
+  flex: 1;
+  display: grid;
+  gap: 5px;
+  color: #8fa8b9;
+  font-size: 11px;
+}
+
+.track-editor-panel input,
+.track-editor-panel select,
+.track-editor-panel button {
+  border: 1px solid rgba(121, 201, 219, .25);
+  border-radius: 6px;
+  background: #081521;
+  color: #eafcff;
+}
+
+.track-editor-panel input,
+.track-editor-panel select { padding: 8px 9px; }
+.track-editor-panel button { padding: 8px 11px; }
+.track-editor-panel button:hover { border-color: rgba(92, 237, 255, .65); }
+.track-editor-panel button:disabled { opacity: .25; cursor: default; }
+
+.track-editor-toolbar {
+  padding: 8px 20px 12px;
+}
+
+.track-editor-columns,
+.track-editor-row {
+  display: grid;
+  grid-template-columns: 48px 150px 1fr 120px;
+  gap: 10px;
+  align-items: center;
+}
+
+.track-editor-columns {
+  padding: 7px 20px;
+  color: #5c7486;
+  font: 700 10px monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-top: 1px solid rgba(255,255,255,.05);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.track-editor-list {
+  min-height: 160px;
+  overflow: auto;
+  padding: 6px 20px 14px;
+}
+
+.track-editor-row {
+  min-height: 54px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .055);
+}
+
+.track-editor-order { color: #5de8f4; font: 700 12px monospace; }
+.track-editor-fields { display: flex; gap: 8px; align-items: center; }
+.track-editor-fields input { width: 130px; }
+.track-editor-fixed { color: #8aa4b5; font: 12px monospace; }
+.track-editor-controls { display: flex; gap: 5px; justify-content: flex-end; }
+.track-editor-controls button { min-width: 34px; padding: 7px; }
+.track-editor-controls .danger { color: #ff788b; }
+
+.track-editor-footer {
+  justify-content: space-between;
+  padding: 13px 20px 16px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.track-editor-load-group { display: flex; gap: 7px; min-width: 320px; }
+.track-editor-load-group select { min-width: 220px; }
+.track-editor-status { flex: 1; color: #83a0b2; font: 11px monospace; text-align: center; }
+.track-editor-status.error { color: #ff7588; }
+.track-editor-panel .primary { border-color: rgba(79, 239, 255, .7); background: #0c3845; color: #d6fdff; font-weight: 700; }
+
+@media (max-width: 720px) {
+  .track-editor-modal { padding: 7px; }
+  .track-editor-panel { width: 100%; max-height: 96vh; }
+  .track-editor-columns { display: none; }
+  .track-editor-row { grid-template-columns: 34px 105px 1fr; }
+  .track-editor-controls { grid-column: 2 / 4; justify-content: flex-start; }
+  .track-editor-meta { flex-direction: column; align-items: stretch; }
+  .track-editor-footer { flex-wrap: wrap; }
+  .track-editor-load-group { min-width: 0; width: 100%; }
+  .track-editor-load-group select { min-width: 0; flex: 1; }
+  .track-editor-status { order: 3; flex-basis: 100%; }
 }
 
 @keyframes chevronPulse {
