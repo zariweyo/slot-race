@@ -1,37 +1,40 @@
 {
-  "version": 1,
-  "id": "neon-long",
-  "name": "Neon Long Eight",
+  "version": 2,
+  "id": "neon-levels",
+  "name": "Neon Levels",
   "closed": true,
   "autoClose": true,
   "start": {
     "x": 220,
     "y": 360,
-    "heading": -18
+    "heading": -18,
+    "level": 0
   },
   "road": {
     "width": 146,
     "lanes": 2,
     "laneSpacing": 44
   },
-  "bridge": {
+  "levels": {
     "height": 88,
-    "rampLength": 235,
-    "plateauLength": 176,
-    "opacity": 0.5
-  },
-  "crossings": {
-    "policy": "auto"
+    "rampLength": 235
   },
   "segments": [
     { "type": "straight", "length": 330 },
     { "type": "curve", "length": 360, "angle": 132 },
+    { "type": "up" },
     { "type": "straight", "length": 420 },
     { "type": "curve", "length": 310, "angle": 108 },
-    { "type": "straight", "length": 520 },
+    { "type": "straight", "length": 360 },
+    { "type": "up" },
+    { "type": "straight", "length": 300 },
     { "type": "curve", "length": 390, "angle": -138 },
-    { "type": "straight", "length": 430 },
+    { "type": "straight", "length": 250 },
+    { "type": "down" },
+    { "type": "straight", "length": 360 },
     { "type": "curve", "length": 320, "angle": -102 },
-    { "type": "straight", "length": 360 }
+    { "type": "straight", "length": 260 },
+    { "type": "down" },
+    { "type": "straight", "length": 300 }
   ]
 }
