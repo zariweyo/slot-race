@@ -26,6 +26,7 @@ const PHYSICS = {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 type Point = { x: number; y: number };
+type Vec3 = { x: number; y: number; z: number };
 
 type TrackPoint = Point & {
   angle: number;
@@ -50,6 +51,7 @@ type PhotonVisual = {
   root: Container;
   trail: Graphics;
   glow: Graphics;
+  cube: Graphics;
 };
 
 type Player = {
@@ -120,46 +122,70 @@ function drawOpenPath(graphics: Graphics, points: Point[], width: number, color:
   graphics.stroke({ width, color, alpha });
 }
 
-function cubeFace(points: Point[], color: number, edgeColor: number, edgeAlpha: number): Graphics {
-  const face = new Graphics();
-  face.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i += 1) face.lineTo(points[i].x, points[i].y);
-  face.lineTo(points[0].x, points[0].y);
-  face.fill({ color, alpha: 0.98 });
-  face.stroke({ width: 1.4, color: edgeColor, alpha: edgeAlpha });
-  return face;
-}
-
 function createPhotonVisual(baseColor: number): PhotonVisual {
   const root = new Container();
   const trail = new Graphics();
   const glow = new Graphics();
+  const cube = new Graphics();
+  glow.ellipse(0, 8, 30, 10).fill({ color: baseColor, alpha: 0.16 });
+  root.addChild(glow, cube);
+  return { root, trail, glow, cube };
+}
 
-  // A true 3D engine is unnecessary for this experiment. These three faces are
-  // built once and then only the container transform changes at runtime.
-  glow.ellipse(0, 15, 31, 12).fill({ color: baseColor, alpha: 0.16 });
+function drawCube3d(visual: PhotonVisual, baseColor: number, yaw: number, pitch: number, ratio: number): void {
+  const half = 15;
+  const height = 28;
+  const vertices: Vec3[] = [
+    { x: -half, y: -half, z: 0 }, { x: half, y: -half, z: 0 },
+    { x: half, y: half, z: 0 }, { x: -half, y: half, z: 0 },
+    { x: -half, y: -half, z: height }, { x: half, y: -half, z: height },
+    { x: half, y: half, z: height }, { x: -half, y: half, z: height },
+  ];
 
-  const top = cubeFace(
-    [{ x: 0, y: -22 }, { x: 20, y: -12 }, { x: 0, y: -2 }, { x: -20, y: -12 }],
-    scaleColor(baseColor, 1.22),
-    0xffffff,
-    0.72,
-  );
-  const left = cubeFace(
-    [{ x: -20, y: -12 }, { x: 0, y: -2 }, { x: 0, y: 20 }, { x: -20, y: 10 }],
-    scaleColor(baseColor, 0.72),
-    0xffffff,
-    0.42,
-  );
-  const right = cubeFace(
-    [{ x: 0, y: -2 }, { x: 20, y: -12 }, { x: 20, y: 10 }, { x: 0, y: 20 }],
-    scaleColor(baseColor, 0.48),
-    0xffffff,
-    0.32,
-  );
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
 
-  root.addChild(glow, left, right, top);
-  return { root, trail, glow };
+  const projected = vertices.map((v): Point => {
+    // Local x = forward, local y = lateral, z = vertical.
+    const pitchedX = v.x * cp + v.z * sp;
+    const pitchedZ = -v.x * sp + v.z * cp;
+    const sx = pitchedX * cy - v.y * sy;
+    const syScreen = pitchedX * sy + v.y * cy;
+    return {
+      x: sx,
+      y: syScreen * 0.46 - pitchedZ * 0.92,
+    };
+  });
+
+  const faces = [
+    { ids: [4, 5, 6, 7], color: scaleColor(baseColor, 1.20) },
+    { ids: [0, 1, 5, 4], color: scaleColor(baseColor, 0.72) },
+    { ids: [1, 2, 6, 5], color: scaleColor(baseColor, 0.50) },
+    { ids: [2, 3, 7, 6], color: scaleColor(baseColor, 0.62) },
+    { ids: [3, 0, 4, 7], color: scaleColor(baseColor, 0.82) },
+  ];
+
+  // Painter sort by average screen y; only five quads, so this is negligible.
+  faces.sort((a, b) => {
+    const ay = a.ids.reduce((sum, id) => sum + projected[id].y, 0) / a.ids.length;
+    const by = b.ids.reduce((sum, id) => sum + projected[id].y, 0) / b.ids.length;
+    return ay - by;
+  });
+
+  visual.cube.clear();
+  for (const face of faces) {
+    const first = projected[face.ids[0]];
+    visual.cube.moveTo(first.x, first.y);
+    for (let i = 1; i < face.ids.length; i += 1) {
+      const p = projected[face.ids[i]];
+      visual.cube.lineTo(p.x, p.y);
+    }
+    visual.cube.lineTo(first.x, first.y);
+    visual.cube.fill({ color: face.color, alpha: 0.98 });
+    visual.cube.stroke({ width: 1.2, color: 0xffffff, alpha: 0.30 + ratio * 0.25 });
+  }
 }
 
 async function createPixiApp(host: HTMLElement): Promise<Application> {
@@ -545,19 +571,27 @@ async function main(): Promise<void> {
   window.addEventListener('pointercancel', releasePointer);
 
   const renderPlayer = (player: Player, p: TrackPoint, ratio: number): void => {
+    const look = 14;
+    const behind = sample(player.distance - look, player.laneOffset);
+    const ahead = sample(player.distance + look, player.laneOffset);
+    const dx = ahead.x - behind.x;
+    const dy = ahead.y - behind.y;
+    const yaw = Math.atan2(dy, dx);
+    const dz = ahead.elevation - behind.elevation;
+    const pitch = Math.atan2(dz, look * 2);
+
     for (const [level, visual] of player.visuals) {
       const active = level === p.renderLevel;
       visual.root.visible = active;
       visual.trail.visible = active;
       if (!active) continue;
 
-      visual.root.position.set(p.x, p.y - 8);
-      // Keep the cube vertical in screen space. Rotating the whole 2D projection
-      // with the road tangent would visually tip the cube over in corners.
+      visual.root.position.set(p.x, p.y - 3);
       visual.root.rotation = 0;
-      const scale = 0.80 + ratio * 0.08;
+      const scale = 0.78 + ratio * 0.07;
       visual.root.scale.set(scale);
-      visual.glow.alpha = 0.72 + ratio * 0.28;
+      visual.glow.alpha = 0.62 + ratio * 0.28;
+      drawCube3d(visual, player.color, yaw, pitch, ratio);
 
       visual.trail.clear();
       if (ratio <= 0.02) continue;
