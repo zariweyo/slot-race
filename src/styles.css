@@ -32,11 +32,13 @@ body {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: #010207;
+  isolation: isolate;
 }
 
-.track-svg,
-.bridge-svg,
-.pixi-layer,
+.background-svg,
+.level-stack,
+.track-level-svg,
+.pixi-level,
 .pixi-ui {
   position: absolute;
   inset: 0;
@@ -44,14 +46,26 @@ body {
   height: 100%;
 }
 
-/* Explicit depth model: SVG z0 -> Pixi z1 -> bridge SVG z2 -> Pixi z3 -> UI z4. */
-.track-svg { z-index: 0; pointer-events: none; }
-.pixi-under { z-index: 1; pointer-events: none; }
-.bridge-svg { z-index: 2; pointer-events: none; }
-.pixi-over { z-index: 3; pointer-events: none; }
-.pixi-ui { z-index: 4; pointer-events: auto; }
+.background-svg {
+  z-index: -1;
+  pointer-events: none;
+}
 
-.pixi-layer canvas,
+.level-stack {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.track-level-svg,
+.pixi-level {
+  pointer-events: none;
+}
+
+.pixi-ui {
+  pointer-events: auto;
+}
+
+.pixi-level canvas,
 .pixi-ui canvas {
   position: absolute;
   inset: 0;
@@ -61,27 +75,10 @@ body {
   margin: 0;
 }
 
-.z-debug-marker {
-  position: absolute;
-  left: 47%;
-  top: 42%;
-  width: 180px;
-  height: 110px;
-  z-index: 99;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 0, 0, .58);
-  border: 4px solid #fff;
-  color: #fff;
-  font: 900 22px monospace;
-  letter-spacing: 1px;
-  pointer-events: none;
-}
-
 .pixi-boot {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -91,22 +88,6 @@ body {
   white-space: pre-wrap;
   text-align: center;
   padding: 24px;
-}
-
-.track-title text {
-  fill: #dffcff;
-  font: 700 32px Arial, sans-serif;
-  letter-spacing: 4px;
-  opacity: .58;
-  filter: url(#cyanGlow);
-}
-
-.track-title .subtitle {
-  fill: #7ceeff;
-  font: 12px Arial, sans-serif;
-  letter-spacing: 6px;
-  opacity: .5;
-  filter: none;
 }
 
 .curve-chevron {
@@ -119,15 +100,16 @@ body {
 
 .curve-chevron.cyan { fill: #59f8ff; filter: url(#cyanGlow); }
 .curve-chevron.magenta { fill: #ff58e9; filter: url(#magentaGlow); }
-.energy-node { animation: nodePulse 1.8s ease-in-out infinite; }
+
+.level-label {
+  fill: #dffcff;
+  font: 700 18px monospace;
+  opacity: .22;
+  letter-spacing: 2px;
+}
 
 @keyframes chevronPulse {
   0%, 22%, 100% { opacity: .10; }
   42% { opacity: 1; }
   62% { opacity: .28; }
-}
-
-@keyframes nodePulse {
-  0%, 100% { opacity: .32; }
-  50% { opacity: .95; }
 }
