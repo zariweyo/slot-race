@@ -224,6 +224,8 @@ async function main(): Promise<void> {
   const wrap = (distance: number): number => ((distance % totalLength) + totalLength) % totalLength;
   const laneOffset = definition.road.laneSpacing / 2;
   const roadHalfWidth = definition.road.width / 2;
+  const autoCloseSegmentIndex = definition.segments.length;
+  const autoCloseRange = compiled.segments.find((segment) => segment.segmentIndex === autoCloseSegmentIndex);
 
   const rawWorld: Array<{
     worldX: number;
@@ -259,14 +261,29 @@ async function main(): Promise<void> {
     });
   }
 
+  let closeNx = 0;
+  let closeNy = 0;
+  if (autoCloseRange) {
+    const closeStart = worldAt(compiled, autoCloseRange.start);
+    const closeEnd = worldAt(compiled, autoCloseRange.end - 0.001);
+    const startWorld = toCanvasWorld(closeStart.x, closeStart.y);
+    const endWorld = toCanvasWorld(closeEnd.x, closeEnd.y);
+    const closeDx = endWorld.x - startWorld.x;
+    const closeDy = endWorld.y - startWorld.y;
+    const closeMag = Math.hypot(closeDx, closeDy) || 1;
+    closeNx = -closeDy / closeMag;
+    closeNy = closeDx / closeMag;
+  }
+
   const cache: CachePoint[] = rawWorld.map((p, i) => {
     const before = rawWorld[(i - 1 + CACHE_SAMPLES) % CACHE_SAMPLES];
     const after = rawWorld[(i + 1) % CACHE_SAMPLES];
     const worldDx = after.worldX - before.worldX;
     const worldDy = after.worldY - before.worldY;
     const worldMag = Math.hypot(worldDx, worldDy) || 1;
-    const worldNx = -worldDy / worldMag;
-    const worldNy = worldDx / worldMag;
+    const onAutoClose = autoCloseRange && p.distance >= autoCloseRange.start && p.distance <= autoCloseRange.end;
+    const worldNx = onAutoClose ? closeNx : -worldDy / worldMag;
+    const worldNy = onAutoClose ? closeNy : worldDx / worldMag;
     const screenDx = after.x - before.x;
     const screenDy = after.y - before.y;
     return {
