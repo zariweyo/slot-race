@@ -52,6 +52,11 @@ type CubeVisual = {
   cube: Graphics;
 };
 
+type TrailSample = {
+  point: TrackPoint;
+  timestamp: number;
+};
+
 type Racer = {
   color: number;
   distance: number;
@@ -60,6 +65,7 @@ type Racer = {
   laneTarget: number;
   laneChangeStartedAt: number;
   visuals: Map<number, CubeVisual>;
+  trailHistory: TrailSample[];
   laps: number;
   currentLapStartedAt: number;
   lastLapMs: number | null;
@@ -490,7 +496,6 @@ async function main(): Promise<void> {
     levelRenderers.push({ level, app });
   }
 
-  // Visible start/finish line across the full road width, on the start level.
   const startPoint = sample(0, 0);
   const startSvg = levelSvgs.get(startPoint.renderLevel);
   if (startSvg) {
@@ -527,7 +532,7 @@ async function main(): Promise<void> {
   uiHost.style.zIndex = String(compiled.maxLevel * 2 + 3);
   const uiApp = await createPixiApp(uiHost);
 
-  const racerColor = 0xf7fbff;
+  const racerColor = 0x43f07b;
   const visuals = new Map<number, CubeVisual>();
   for (const renderer of levelRenderers) {
     const visual = createCubeVisual(racerColor);
@@ -546,6 +551,7 @@ async function main(): Promise<void> {
     laneTarget: -laneOffset,
     laneChangeStartedAt: now,
     visuals,
+    trailHistory: [],
     laps: 0,
     currentLapStartedAt: now,
     lastLapMs: null,
@@ -575,6 +581,9 @@ async function main(): Promise<void> {
   centerHud.anchor.set(0.5, 0);
   centerHud.position.set(WIDTH / 2, 124);
   uiApp.stage.addChild(centerHud);
+
+  boot?.remove();
+  setupTrackEditor({ current: definition });
 
   const cyanButton = new Graphics();
   cyanButton.roundRect(34, HEIGHT - 116, 210, 78, 22).fill({ color: 0x27e7ff, alpha: 0.24 }).stroke({ width: 4, color: 0x27e7ff, alpha: 0.95 });
@@ -612,7 +621,7 @@ async function main(): Promise<void> {
     chooseLane(x < WIDTH / 2 ? -laneOffset : laneOffset, performance.now());
   });
 
-  const renderRacer = (p: TrackPoint): void => {
+  const renderRacer = (p: TrackPoint, timestamp: number): void => {
     const look = 14;
     const behind = sample(racer.distance - look, racer.laneOffset);
     const ahead = sample(racer.distance + look, racer.laneOffset);
@@ -623,6 +632,12 @@ async function main(): Promise<void> {
     const horizontal = Math.hypot(worldDx, worldDy) || look * 2;
     const pitch = Math.atan2(dz, horizontal);
     const horizontalDepth = p.worldX * 0.26 + p.worldY * 0.36;
+
+    racer.trailHistory.push({ point: p, timestamp });
+    const trailWindowMs = 185;
+    while (racer.trailHistory.length > 2 && racer.trailHistory[0].timestamp < timestamp - trailWindowMs) {
+      racer.trailHistory.shift();
+    }
 
     for (const [level, visual] of racer.visuals) {
       const active = level === p.renderLevel;
@@ -637,17 +652,14 @@ async function main(): Promise<void> {
       drawCube3d(visual, racer.color, yaw, pitch);
 
       visual.trail.clear();
-      const wakeLength = 400 * TRAIL_SCALE;
-      const points: TrackPoint[] = [];
-      for (let i = 24; i >= 0; i -= 1) points.push(sample(racer.distance - wakeLength * (i / 24), racer.laneOffset));
-      drawOpenPath(visual.trail, points, 34, racer.color, 0.07);
-      drawOpenPath(visual.trail, points, 16, racer.color, 0.17);
-      drawOpenPath(visual.trail, points, 5, 0xe9ffff, 0.76);
+      const historyPoints = racer.trailHistory
+        .map((entry) => entry.point)
+        .filter((point) => point.renderLevel === level);
+      drawOpenPath(visual.trail, historyPoints, 34, racer.color, 0.07);
+      drawOpenPath(visual.trail, historyPoints, 16, racer.color, 0.17);
+      drawOpenPath(visual.trail, historyPoints, 5, 0xe9ffff, 0.76);
     }
   };
-
-  boot?.remove();
-  setupTrackEditor({ current: definition });
 
   let frames = 0;
   let elapsed = 0;
@@ -677,7 +689,7 @@ async function main(): Promise<void> {
       racer.bestLapMs = racer.bestLapMs === null ? lapMs : Math.min(racer.bestLapMs, lapMs);
     }
 
-    renderRacer(sample(racer.distance, racer.laneOffset));
+    renderRacer(sample(racer.distance, racer.laneOffset), timestamp);
     for (const renderer of levelRenderers) renderer.app.renderer.render(renderer.app.stage);
 
     frames += 1;
