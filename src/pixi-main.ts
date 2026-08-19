@@ -1,6 +1,8 @@
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
 import './styles.css';
 import trackJson from './tracks/neon-long.json';
+import { setupTrackEditor } from './game/track/TrackEditor';
+import { loadInitialTrack } from './game/track/TrackStorage';
 import {
   compileTrack,
   type CompiledTrack,
@@ -195,9 +197,9 @@ function svgPath(d: string, stroke: string, width: number, opacity: number, line
 }
 
 async function main(): Promise<void> {
-  setBoot('COMPILING MULTI-LEVEL TRACK...');
+  setBoot('LOADING TRACK...');
 
-  const definition = trackJson as TrackDefinition;
+  const definition = await loadInitialTrack(trackJson as TrackDefinition);
   const compiled = compileTrack(definition, 5);
   if (compiled.points.length < 4 || compiled.totalLength <= 0) throw new Error('Track compiler produced an empty track');
 
@@ -451,6 +453,7 @@ async function main(): Promise<void> {
   uiApp.stage.addChild(note);
 
   boot?.remove();
+  setupTrackEditor({ current: definition });
 
   const keyState = { left: false, right: false };
   const leftPointers = new Set<number>();
