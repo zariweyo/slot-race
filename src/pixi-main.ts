@@ -250,6 +250,15 @@ function svgPath(d: string, stroke: string, width: number, opacity: number, line
   return path;
 }
 
+function svgFill(d: string, fill: string, opacity: number): SVGPathElement {
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', d);
+  path.setAttribute('fill', fill);
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('opacity', String(opacity));
+  return path;
+}
+
 function neonKerb(d: string): SVGPathElement[] {
   const red = svgPath(d, '#ff2945', 6, 0.96, 'butt');
   const white = svgPath(d, '#f7fbff', 6, 1, 'butt');
@@ -420,6 +429,34 @@ async function main(): Promise<void> {
     return d;
   };
 
+  const asphaltForLevel = (level: number): string => {
+    let d = '';
+    let left: Point[] = [];
+    let right: Point[] = [];
+
+    const closeSection = (): void => {
+      if (left.length >= 2) {
+        d += `M${left.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')} `;
+        d += `L${right.reverse().map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' L')} Z `;
+      }
+      left = [];
+      right = [];
+    };
+
+    for (let i = 0; i <= SVG_SAMPLES; i += 1) {
+      const at = (i / SVG_SAMPLES) * totalLength;
+      const centerPoint = sample(at, 0);
+      if (centerPoint.renderLevel !== level) {
+        closeSection();
+        continue;
+      }
+      left.push(sample(at, -roadHalfWidth));
+      right.push(sample(at, roadHalfWidth));
+    }
+    closeSection();
+    return d;
+  };
+
   const stack = document.querySelector<HTMLDivElement>('#level-stack');
   if (!stack) throw new Error('Missing #level-stack');
   stack.replaceChildren();
@@ -442,9 +479,7 @@ async function main(): Promise<void> {
     const laneA = pathForLevel(level, -laneOffset);
     const laneB = pathForLevel(level, laneOffset);
     if (center) {
-      svg.appendChild(svgPath(center, '#4a25ff', 160, 0.035));
-      svg.appendChild(svgPath(center, '#0d1625', 148, 0.76));
-      svg.appendChild(svgPath(center, '#174d74', 118, 0.10));
+      svg.appendChild(svgFill(asphaltForLevel(level), '#ffffff', 0.1));
       for (const edge of neonKerb(leftEdge)) svg.appendChild(edge);
       for (const edge of neonKerb(rightEdge)) svg.appendChild(edge);
       svg.appendChild(svgPath(laneA, '#010309', 7, 0.82, 'round'));

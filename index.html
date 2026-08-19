@@ -51,24 +51,42 @@
           <div class="track-editor-meta">
             <label>Nombre<input id="track-editor-name" type="text" /></label>
             <label>ID<input id="track-editor-id" type="text" /></label>
-            <label>Velocidad ×<input id="track-editor-speed" type="number" min="0.1" step="0.1" /></label>
+            <label class="track-editor-speed">Velocidad ×<input id="track-editor-speed" type="number" min="0.1" step="0.1" /></label>
           </div>
 
-          <div class="track-editor-toolbar">
-            <button id="track-editor-new" type="button">Nuevo circuito</button>
-            <select id="track-editor-add-type">
-              <option value="straight">Straight</option>
-              <option value="curve">Curve</option>
-              <option value="up">Up</option>
-              <option value="down">Down</option>
-            </select>
-            <button id="track-editor-add" type="button">+ Añadir slot</button>
-          </div>
+          <div class="track-editor-workspace">
+            <section class="track-editor-sequence" aria-label="Secuencia de slots">
+              <div class="track-editor-section-head">
+                <div>
+                  <strong>Secuencia</strong>
+                  <span id="track-editor-slot-count"></span>
+                </div>
+                <div class="track-editor-file-actions">
+                  <button id="track-editor-new" type="button">Nuevo</button>
+                  <button id="track-editor-duplicate" type="button">Duplicar</button>
+                </div>
+              </div>
+              <div class="track-editor-columns">
+                <span>#</span><span>Tipo</span><span>Parámetros</span><span></span>
+              </div>
+              <div id="track-editor-list" class="track-editor-list"></div>
+            </section>
 
-          <div class="track-editor-columns">
-            <span>#</span><span>Tipo</span><span>Parámetros</span><span></span>
+            <aside class="track-editor-preview" aria-label="Minimapa del circuito">
+              <div class="track-editor-section-head">
+                <div>
+                  <strong>Minimapa 2D</strong>
+                  <span id="track-editor-map-info">Todas las capas</span>
+                </div>
+                <button id="track-editor-layer" type="button" title="Cambiar capa">CAPAS: TODAS</button>
+              </div>
+              <div class="track-editor-map-frame">
+                <svg id="track-editor-map" viewBox="0 0 420 300" preserveAspectRatio="xMidYMid meet" aria-label="Vista previa 2D del circuito"></svg>
+                <div id="track-editor-map-error" class="track-editor-map-error"></div>
+              </div>
+              <div id="track-editor-levels" class="track-editor-levels"></div>
+            </aside>
           </div>
-          <div id="track-editor-list" class="track-editor-list"></div>
 
           <footer class="track-editor-footer">
             <div class="track-editor-load-group">
