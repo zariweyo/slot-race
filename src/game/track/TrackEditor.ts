@@ -3,12 +3,25 @@ import { listTracks, saveTrack, setActiveTrackId } from './TrackStorage';
 
 type EditorOptions = { current: TrackDefinition };
 
+type DragState = {
+  index: number;
+  type: 'straight' | 'curve';
+  startPointerX: number;
+  startPointerY: number;
+  startLength: number;
+  startAngle: number;
+  tangentX: number;
+  tangentY: number;
+  scale: number;
+};
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MAP_WIDTH = 420;
 const MAP_HEIGHT = 300;
 const MAP_PADDING = 26;
 const LEVEL_COLORS = ['#62efff', '#ff6bdc', '#ffd166', '#7cf29a', '#ff765f', '#b99cff'];
 const AUTO_CLOSE_COLOR = '#ff9f43';
+const SELECTED_COLOR = '#ffffff';
 const SEGMENT_TYPES: Array<{ type: TrackSegment['type']; label: string }> = [
   { type: 'straight', label: 'Recta' },
   { type: 'curve', label: 'Curva' },
@@ -87,8 +100,10 @@ export function setupTrackEditor(options: EditorOptions): void {
 
   let draft = clone(options.current);
   let insertAfter: number | null = null;
+  let selectedSegment: number | null = null;
   let visibleLayer: number | null = null;
   let availableLayers = 1;
+  let dragState: DragState | null = null;
 
   const setStatus = (message: string, error = false): void => {
     status.textContent = message;
@@ -98,6 +113,14 @@ export function setupTrackEditor(options: EditorOptions): void {
   const svgElement = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] => (
     document.createElementNS(SVG_NS, tag)
   );
+
+  const pointerPosition = (event: PointerEvent): { x: number; y: number } => {
+    const rect = map.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / Math.max(1, rect.width)) * MAP_WIDTH,
+      y: ((event.clientY - rect.top) / Math.max(1, rect.height)) * MAP_HEIGHT,
+    };
+  };
 
   const renderMap = (): void => {
     map.replaceChildren();
@@ -129,6 +152,21 @@ export function setupTrackEditor(options: EditorOptions): void {
       const roadWidth = Math.max(7, Math.min(28, draft.road.width * scale));
       const autoCloseSegmentIndex = draft.segments.length;
 
+      const mapPoint = (point: { x: number; y: number }): { x: number; y: number } => ({
+        x: point.x * scale + offsetX,
+        y: point.y * scale + offsetY,
+      });
+
+      const pointsForSegment = (index: number) => compiled.points.filter((point) => point.segmentIndex === index);
+
+      const pathFromPoints = (points: Array<{ x: number; y: number }>): string => {
+        if (points.length === 0) return '';
+        return points.map((point, index) => {
+          const p = mapPoint(point);
+          return `${index === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+        }).join(' ');
+      };
+
       const pathForLayer = (layer: number, autoClose: boolean): string => {
         let path = '';
         let drawing = false;
@@ -138,9 +176,8 @@ export function setupTrackEditor(options: EditorOptions): void {
             drawing = false;
             return;
           }
-          const x = point.x * scale + offsetX;
-          const y = point.y * scale + offsetY;
-          path += `${drawing ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)} `;
+          const p = mapPoint(point);
+          path += `${drawing ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)} `;
           drawing = true;
         });
         return path;
@@ -186,11 +223,134 @@ export function setupTrackEditor(options: EditorOptions): void {
         }
       }
 
+      // One transparent hit-path per real slot. This is what makes the minimap selectable.
+      draft.segments.forEach((segment, index) => {
+        const segmentPoints = pointsForSegment(index);
+        if (segmentPoints.length < 2) return;
+        const layer = segmentPoints[Math.floor(segmentPoints.length / 2)]?.renderLevel ?? 0;
+        if (visibleLayer !== null && layer !== visibleLayer) return;
+        const d = pathFromPoints(segmentPoints);
+
+        if (selectedSegment === index) {
+          const selected = svgElement('path');
+          selected.setAttribute('d', d);
+          selected.setAttribute('fill', 'none');
+          selected.setAttribute('stroke', SELECTED_COLOR);
+          selected.setAttribute('stroke-width', String(Math.max(3, roadWidth * 0.28)));
+          selected.setAttribute('stroke-linecap', 'round');
+          selected.setAttribute('stroke-linejoin', 'round');
+          selected.setAttribute('opacity', '0.95');
+          selected.style.filter = 'drop-shadow(0 0 5px rgba(255,255,255,.85))';
+          map.appendChild(selected);
+        }
+
+        const hit = svgElement('path');
+        hit.setAttribute('d', d);
+        hit.setAttribute('fill', 'none');
+        hit.setAttribute('stroke', '#ffffff');
+        hit.setAttribute('stroke-width', String(Math.max(18, roadWidth + 12)));
+        hit.setAttribute('stroke-opacity', '0');
+        hit.setAttribute('pointer-events', 'stroke');
+        hit.style.cursor = 'pointer';
+        hit.addEventListener('pointerdown', (event) => {
+          event.stopPropagation();
+          selectedSegment = index;
+          insertAfter = null;
+          render();
+        });
+        map.appendChild(hit);
+      });
+
+      if (selectedSegment !== null && draft.segments[selectedSegment]) {
+        const segment = draft.segments[selectedSegment];
+        const segmentPoints = pointsForSegment(selectedSegment);
+        if (segmentPoints.length >= 2) {
+          const first = mapPoint(segmentPoints[0]);
+          const last = mapPoint(segmentPoints[segmentPoints.length - 1]);
+          const dx = last.x - first.x;
+          const dy = last.y - first.y;
+          const mag = Math.hypot(dx, dy) || 1;
+          const tangentX = dx / mag;
+          const tangentY = dy / mag;
+
+          if (segment.type === 'straight' || segment.type === 'curve') {
+            const handle = svgElement('circle');
+            handle.setAttribute('cx', last.x.toFixed(2));
+            handle.setAttribute('cy', last.y.toFixed(2));
+            handle.setAttribute('r', segment.type === 'curve' ? '9' : '8');
+            handle.setAttribute('class', 'track-editor-map-handle');
+            handle.setAttribute('fill', segment.type === 'curve' ? '#ffd166' : '#7cf29a');
+            handle.style.cursor = segment.type === 'curve' ? 'ew-resize' : 'grab';
+            handle.addEventListener('pointerdown', (event) => {
+              event.stopPropagation();
+              const pos = pointerPosition(event);
+              dragState = {
+                index: selectedSegment!,
+                type: segment.type,
+                startPointerX: pos.x,
+                startPointerY: pos.y,
+                startLength: segment.length,
+                startAngle: segment.type === 'curve' ? segment.angle : 0,
+                tangentX,
+                tangentY,
+                scale,
+              };
+              map.setPointerCapture(event.pointerId);
+            });
+            map.appendChild(handle);
+          }
+
+          const controlsY = Math.max(18, Math.min(MAP_HEIGHT - 18, last.y - 26));
+          const plusX = Math.max(18, Math.min(MAP_WIDTH - 48, last.x + 18));
+          const deleteX = Math.max(48, Math.min(MAP_WIDTH - 18, last.x + 48));
+
+          const addControl = (x: number, label: string, color: string, action: () => void): void => {
+            const group = svgElement('g');
+            group.style.cursor = 'pointer';
+            const circle = svgElement('circle');
+            circle.setAttribute('cx', x.toFixed(2));
+            circle.setAttribute('cy', controlsY.toFixed(2));
+            circle.setAttribute('r', '12');
+            circle.setAttribute('fill', '#07111f');
+            circle.setAttribute('stroke', color);
+            circle.setAttribute('stroke-width', '2');
+            const text = svgElement('text');
+            text.setAttribute('x', x.toFixed(2));
+            text.setAttribute('y', (controlsY + 1).toFixed(2));
+            text.setAttribute('fill', color);
+            text.setAttribute('font-size', '16');
+            text.setAttribute('font-family', 'monospace');
+            text.setAttribute('font-weight', '900');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'middle');
+            text.textContent = label;
+            group.append(circle, text);
+            group.addEventListener('pointerdown', (event) => {
+              event.stopPropagation();
+              action();
+            });
+            map.appendChild(group);
+          };
+
+          addControl(plusX, '+', '#65f5ff', () => {
+            draft.segments.splice(selectedSegment! + 1, 0, createSegment('straight'));
+            selectedSegment = selectedSegment! + 1;
+            render();
+          });
+          addControl(deleteX, '×', '#ff798e', () => {
+            draft.segments.splice(selectedSegment!, 1);
+            selectedSegment = draft.segments.length === 0 ? null : Math.min(selectedSegment!, draft.segments.length - 1);
+            render();
+          });
+        }
+      }
+
       const start = compiled.points[0];
       if (start && (visibleLayer === null || start.renderLevel === visibleLayer)) {
         const marker = svgElement('circle');
-        marker.setAttribute('cx', (start.x * scale + offsetX).toFixed(2));
-        marker.setAttribute('cy', (start.y * scale + offsetY).toFixed(2));
+        const p = mapPoint(start);
+        marker.setAttribute('cx', p.x.toFixed(2));
+        marker.setAttribute('cy', p.y.toFixed(2));
         marker.setAttribute('r', '5');
         marker.setAttribute('class', 'track-editor-map-start');
         map.appendChild(marker);
@@ -198,7 +358,8 @@ export function setupTrackEditor(options: EditorOptions): void {
 
       layerButton.textContent = visibleLayer === null ? 'CAPAS: TODAS' : `CAPA: ${visibleLayer}`;
       const playState = compiled.validation.playable ? 'JUGABLE' : 'NO JUGABLE';
-      mapInfo.textContent = `${Math.round(compiled.totalLength)} u · ${availableLayers} ${availableLayers === 1 ? 'capa' : 'capas'} · ${playState}`;
+      const selectedText = selectedSegment === null ? '' : ` · SLOT ${selectedSegment + 1}`;
+      mapInfo.textContent = `${Math.round(compiled.totalLength)} u · ${availableLayers} ${availableLayers === 1 ? 'capa' : 'capas'} · ${playState}${selectedText}`;
       if (compiled.validation.reason) mapError.textContent = compiled.validation.reason;
       else if (compiled.validation.hasAutoClose) mapError.textContent = 'Cierre automático mostrado en naranja';
     } catch (error) {
@@ -209,6 +370,35 @@ export function setupTrackEditor(options: EditorOptions): void {
       mapError.textContent = error instanceof Error ? error.message : String(error);
     }
   };
+
+  map.addEventListener('pointermove', (event) => {
+    if (!dragState) return;
+    const segment = draft.segments[dragState.index];
+    if (!segment) return;
+    const pos = pointerPosition(event);
+    const dx = pos.x - dragState.startPointerX;
+    const dy = pos.y - dragState.startPointerY;
+
+    if (dragState.type === 'straight' && segment.type === 'straight') {
+      const projectedPixels = dx * dragState.tangentX + dy * dragState.tangentY;
+      const rawLength = dragState.startLength + projectedPixels / Math.max(0.001, dragState.scale);
+      segment.length = Math.max(20, Math.round(rawLength / 10) * 10);
+    } else if (dragState.type === 'curve' && segment.type === 'curve') {
+      let angle = dragState.startAngle + dx * 0.65;
+      angle = Math.max(-340, Math.min(340, angle));
+      if (Math.abs(angle) < 5) angle = angle < 0 ? -5 : 5;
+      segment.angle = Math.round(angle);
+    }
+    renderMap();
+  });
+
+  const endDrag = (): void => {
+    if (!dragState) return;
+    dragState = null;
+    render();
+  };
+  map.addEventListener('pointerup', endDrag);
+  map.addEventListener('pointercancel', endDrag);
 
   const createInsertMenu = (index: number): HTMLDivElement => {
     const menu = document.createElement('div');
@@ -222,6 +412,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       button.textContent = typeLabel;
       button.addEventListener('click', () => {
         draft.segments.splice(index + 1, 0, createSegment(type));
+        selectedSegment = index + 1;
         insertAfter = null;
         render();
       });
@@ -240,6 +431,13 @@ export function setupTrackEditor(options: EditorOptions): void {
     draft.segments.forEach((segment, index) => {
       const row = document.createElement('div');
       row.className = 'track-editor-row';
+      row.classList.toggle('selected', selectedSegment === index);
+      row.addEventListener('pointerdown', (event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button, input, select')) return;
+        selectedSegment = index;
+        render();
+      });
 
       const order = document.createElement('div');
       order.className = 'track-editor-order';
@@ -257,6 +455,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       });
       type.addEventListener('change', () => {
         draft.segments[index] = createSegment(type.value as TrackSegment['type']);
+        selectedSegment = index;
         render();
       });
       row.appendChild(type);
@@ -271,6 +470,7 @@ export function setupTrackEditor(options: EditorOptions): void {
         length.min = '20';
         length.step = '10';
         length.value = String(segment.length);
+        length.addEventListener('focus', () => { selectedSegment = index; renderMap(); });
         length.addEventListener('input', () => {
           if (segment.type === 'straight' || segment.type === 'curve') segment.length = Math.max(20, Number(length.value) || 20);
           renderMap();
@@ -285,6 +485,7 @@ export function setupTrackEditor(options: EditorOptions): void {
         angle.type = 'number';
         angle.step = '5';
         angle.value = String(segment.angle);
+        angle.addEventListener('focus', () => { selectedSegment = index; renderMap(); });
         angle.addEventListener('input', () => {
           segment.angle = Number(angle.value) || 0;
           renderMap();
@@ -309,6 +510,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       up.disabled = index === 0;
       up.addEventListener('click', () => {
         [draft.segments[index - 1], draft.segments[index]] = [draft.segments[index], draft.segments[index - 1]];
+        selectedSegment = index - 1;
         render();
       });
       const down = document.createElement('button');
@@ -318,6 +520,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       down.disabled = index === draft.segments.length - 1;
       down.addEventListener('click', () => {
         [draft.segments[index], draft.segments[index + 1]] = [draft.segments[index + 1], draft.segments[index]];
+        selectedSegment = index + 1;
         render();
       });
       const add = document.createElement('button');
@@ -327,6 +530,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       add.className = 'add';
       add.setAttribute('aria-expanded', String(insertAfter === index));
       add.addEventListener('click', () => {
+        selectedSegment = index;
         insertAfter = insertAfter === index ? null : index;
         render();
       });
@@ -337,6 +541,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       remove.className = 'danger';
       remove.addEventListener('click', () => {
         draft.segments.splice(index, 1);
+        selectedSegment = draft.segments.length === 0 ? null : Math.min(index, draft.segments.length - 1);
         insertAfter = null;
         render();
       });
@@ -380,6 +585,7 @@ export function setupTrackEditor(options: EditorOptions): void {
     modal.setAttribute('aria-hidden', 'false');
     draft = clone(options.current);
     insertAfter = null;
+    selectedSegment = null;
     visibleLayer = null;
     render();
     await refreshStoredTracks();
@@ -401,6 +607,7 @@ export function setupTrackEditor(options: EditorOptions): void {
   newButton.addEventListener('click', () => {
     draft = createNewTrack(options.current);
     insertAfter = null;
+    selectedSegment = 0;
     visibleLayer = null;
     render();
     setStatus('Nuevo circuito sin guardar');
