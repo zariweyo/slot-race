@@ -1,13 +1,18 @@
-import { execSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 
-const appVersion = (() => {
-  try {
-    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
-  } catch {
-    return 'dev';
-  }
-})();
+type BuildProcess = {
+  env?: Record<string, string | undefined>;
+};
+
+const buildProcess = (globalThis as typeof globalThis & { process?: BuildProcess }).process;
+const fullCommit =
+  buildProcess?.env?.GITHUB_SHA ??
+  buildProcess?.env?.VERCEL_GIT_COMMIT_SHA ??
+  buildProcess?.env?.CF_PAGES_COMMIT_SHA ??
+  buildProcess?.env?.SOURCE_VERSION ??
+  buildProcess?.env?.COMMIT_SHA ??
+  'dev';
+const appVersion = fullCommit === 'dev' ? 'dev' : fullCommit.slice(0, 7);
 
 export default defineConfig({
   base: '/slot-race/',
