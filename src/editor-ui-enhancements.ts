@@ -122,4 +122,34 @@ function setupEditorUiEnhancements(): void {
   observer.observe(document.documentElement, { childList: true, subtree: true });
 }
 
+function setupGlassBase(): void {
+  const group = document.querySelector<SVGGElement>('.track-glass-base');
+  if (!group) return;
+  const rects = group.querySelectorAll<SVGRectElement>('rect');
+  const outer = rects[0];
+  const inner = rects[1];
+  if (outer) { outer.setAttribute('x', '35'); outer.setAttribute('y', '12'); outer.setAttribute('width', '1210'); outer.setAttribute('height', '696'); outer.setAttribute('rx', '58'); outer.setAttribute('ry', '58'); }
+  if (inner) { inner.setAttribute('x', '49'); inner.setAttribute('y', '26'); inner.setAttribute('width', '1182'); inner.setAttribute('height', '668'); inner.setAttribute('rx', '48'); inner.setAttribute('ry', '48'); }
+  const shine = group.querySelector<SVGPathElement>('path');
+  if (shine) shine.setAttribute('d', 'M90 52 H1110 Q1190 52 1210 112 L1160 185 H170 Q95 185 72 130 Z');
+
+  if (!group.querySelector('#track-watermark')) {
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.id = 'track-watermark';
+    text.setAttribute('x', '1180');
+    text.setAttribute('y', '665');
+    text.setAttribute('text-anchor', 'end');
+    text.setAttribute('fill', '#d9f6ff');
+    text.setAttribute('fill-opacity', '.18');
+    text.setAttribute('font-family', 'Arial Black, Arial, sans-serif');
+    text.setAttribute('font-size', '28');
+    text.setAttribute('font-style', 'italic');
+    text.setAttribute('font-weight', '900');
+    text.setAttribute('letter-spacing', '4');
+    text.textContent = 'PHOTON CIRCUIT';
+    group.appendChild(text);
+  }
+}
+
+setupGlassBase();
 setupEditorUiEnhancements();
