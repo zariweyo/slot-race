@@ -14,7 +14,7 @@
   "road": {
     "width": 146,
     "lanes": 2,
-    "laneSpacing": 44
+    "laneSpacing": 64
   },
   "levels": {
     "height": 88,
