@@ -260,7 +260,12 @@ body {
   border-bottom: 1px solid rgba(100, 199, 226, .07);
 }
 .track-editor-row:hover { background: rgba(64, 181, 211, .045); }
+.track-editor-row.selected {
+  background: rgba(85, 234, 255, .085);
+  box-shadow: inset 3px 0 #55eaff;
+}
 .track-editor-order { color: #4f788b; font: 10px monospace; }
+.track-editor-row.selected .track-editor-order { color: #dffcff; }
 .track-editor-fields { display: flex; align-items: center; gap: 6px; }
 .track-editor-fields label {
   display: flex;
@@ -312,18 +317,26 @@ body {
   background-size: 20px 20px;
 }
 .track-editor-map-frame svg { display: block; width: 100%; height: 100%; }
+#track-editor-map { touch-action: none; }
 .track-editor-map-outline,
 .track-editor-map-track { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .track-editor-map-outline { stroke: #010207; }
 .track-editor-map-start { fill: #fff; stroke: #02060c; stroke-width: 2px; }
+.track-editor-map-handle {
+  stroke: #07111f;
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 5px rgba(255,255,255,.7));
+}
 .track-editor-map-error {
   position: absolute;
   inset: 12px;
   display: grid;
-  place-items: center;
+  place-items: end center;
+  pointer-events: none;
   color: #ff798e;
   font: 10px/1.4 monospace;
   text-align: center;
+  text-shadow: 0 1px 3px #000;
 }
 .track-editor-levels { display: flex; flex-wrap: wrap; gap: 8px; min-height: 29px; padding: 2px 10px 8px; }
 .track-editor-levels span { color: #93b5c3; font: 9px monospace; }
