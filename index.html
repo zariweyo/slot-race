@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#02040b" />
     <link rel="stylesheet" href="/src/track-editor-v2.css" />
+    <link rel="stylesheet" href="/src/game-controls.css" />
     <title>Photon Circuit · PixiJS</title>
   </head>
   <body>
@@ -56,6 +57,30 @@
 
         <div id="level-stack" class="level-stack"></div>
         <div id="pixi-ui" class="pixi-ui"></div>
+
+        <div class="rail-controls" aria-label="Controles de raíles">
+          <button class="rail-control rail-control-left" data-rail-control="left" type="button" aria-label="Raíl cyan">
+            <svg viewBox="0 0 80 120" aria-hidden="true">
+              <rect class="remote-body" x="22" y="52" width="36" height="50" rx="10" />
+              <circle class="remote-dot" cx="40" cy="84" r="5" />
+              <path class="remote-antenna" d="M40 52 V38" />
+              <path class="remote-wave" d="M28 34 Q40 22 52 34" />
+              <path class="remote-wave" d="M19 27 Q40 5 61 27" opacity=".68" />
+              <path class="remote-wave" d="M10 20 Q40 -10 70 20" opacity=".42" />
+            </svg>
+          </button>
+          <button class="rail-control rail-control-right" data-rail-control="right" type="button" aria-label="Raíl violeta">
+            <svg viewBox="0 0 80 120" aria-hidden="true">
+              <rect class="remote-body" x="22" y="52" width="36" height="50" rx="10" />
+              <circle class="remote-dot" cx="40" cy="84" r="5" />
+              <path class="remote-antenna" d="M40 52 V38" />
+              <path class="remote-wave" d="M28 34 Q40 22 52 34" />
+              <path class="remote-wave" d="M19 27 Q40 5 61 27" opacity=".68" />
+              <path class="remote-wave" d="M10 20 Q40 -10 70 20" opacity=".42" />
+            </svg>
+          </button>
+        </div>
+
         <button id="track-editor-open" class="track-editor-open" type="button">EDITOR DE PISTA</button>
         <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
       </div>
@@ -123,6 +148,7 @@
     </div>
     <script type="module" src="/src/editor-pause.ts"></script>
     <script type="module" src="/src/editor-ui-enhancements.ts"></script>
+    <script type="module" src="/src/game-controls.ts"></script>
     <script type="module" src="/src/pixi-main.ts"></script>
   </body>
 </html>
