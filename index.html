@@ -16,6 +16,11 @@
               <stop offset="0.52" stop-color="#07111f" />
               <stop offset="1" stop-color="#010207" />
             </radialGradient>
+            <linearGradient id="waterFade" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#0b2340" stop-opacity=".10" />
+              <stop offset=".56" stop-color="#0a4160" stop-opacity=".16" />
+              <stop offset="1" stop-color="#07364c" stop-opacity=".34" />
+            </linearGradient>
             <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="7" result="blur" />
               <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -27,9 +32,19 @@
             <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
               <path d="M48 0 L0 0 0 48" fill="none" stroke="#17304b" stroke-width="1" opacity=".22" />
             </pattern>
+            <pattern id="waterWaves" width="160" height="54" patternUnits="userSpaceOnUse">
+              <path d="M-20 22 C10 5 38 39 68 22 S126 5 160 22 S214 39 240 22" fill="none" stroke="#54d9ff" stroke-width="1.4" opacity=".22" />
+              <path d="M-40 42 C-6 25 24 58 58 42 S116 25 150 42 S208 58 240 42" fill="none" stroke="#83f8ff" stroke-width="1" opacity=".12" />
+            </pattern>
           </defs>
           <rect width="1280" height="720" fill="url(#bgGlow)" />
-          <rect width="1280" height="720" fill="url(#grid)" opacity=".55" />
+          <rect width="1280" height="720" fill="url(#grid)" opacity=".34" />
+          <g class="water-floor">
+            <path d="M0 385 L1280 385 L1280 720 L0 720 Z" fill="url(#waterFade)" />
+            <rect class="water-wave-sheet water-wave-sheet-a" x="-160" y="390" width="1600" height="380" fill="url(#waterWaves)" />
+            <rect class="water-wave-sheet water-wave-sheet-b" x="-320" y="420" width="1760" height="330" fill="url(#waterWaves)" opacity=".5" />
+            <path d="M0 385 L1280 385" stroke="#5de8ff" stroke-width="1" opacity=".14" />
+          </g>
         </svg>
 
         <div id="level-stack" class="level-stack"></div>
