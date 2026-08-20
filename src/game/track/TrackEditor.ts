@@ -181,6 +181,7 @@ export function setupTrackEditor(options: EditorOptions): void {
   let zoom = 1;
   let pan: Point = { x: 0, y: 0 };
   let gestureState: GestureState | null = null;
+  let contentGroup: SVGGElement | null = null;
   const pointers = new Map<number, Point>();
 
   const setStatus = (message: string, error = false): void => {
@@ -197,6 +198,8 @@ export function setupTrackEditor(options: EditorOptions): void {
       y: ((event.clientY - rect.top) / Math.max(1, rect.height)) * MAP_HEIGHT,
     };
   };
+
+  const viewportTransform = (): string => `translate(${pan.x.toFixed(2)} ${pan.y.toFixed(2)}) translate(${MAP_WIDTH / 2} ${MAP_HEIGHT / 2}) scale(${zoom.toFixed(3)}) translate(${-MAP_WIDTH / 2} ${-MAP_HEIGHT / 2})`;
 
   const setTab = (tab: 'map' | 'list'): void => {
     activeTab = tab;
@@ -220,6 +223,7 @@ export function setupTrackEditor(options: EditorOptions): void {
 
   const renderMap = (): void => {
     map.replaceChildren();
+    contentGroup = null;
     levels.replaceChildren();
     mapError.textContent = '';
 
@@ -246,8 +250,9 @@ export function setupTrackEditor(options: EditorOptions): void {
       const autoCloseSegmentIndex = draft.segments.length;
 
       const content = svgElement('g');
-      content.setAttribute('transform', `translate(${pan.x.toFixed(2)} ${pan.y.toFixed(2)}) translate(${MAP_WIDTH / 2} ${MAP_HEIGHT / 2}) scale(${zoom.toFixed(3)}) translate(${-MAP_WIDTH / 2} ${-MAP_HEIGHT / 2})`);
+      content.setAttribute('transform', viewportTransform());
       map.appendChild(content);
+      contentGroup = content;
 
       const mapPoint = (point: { x: number; y: number }): Point => ({ x: point.x * baseScale + offsetX, y: point.y * baseScale + offsetY });
       const pointsForSegment = (index: number) => compiled.points.filter((point) => point.segmentIndex === index);
@@ -560,7 +565,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       const center = { x: (values[0].x + values[1].x) / 2, y: (values[0].y + values[1].y) / 2 };
       zoom = Math.max(1, Math.min(5, gestureState.startZoom * distance / gestureState.startDistance));
       pan = { x: gestureState.startPan.x + center.x - gestureState.startCenter.x, y: gestureState.startPan.y + center.y - gestureState.startCenter.y };
-      renderMap();
+      contentGroup?.setAttribute('transform', viewportTransform());
       return;
     }
     if (!dragState || pointers.size > 1) return;
@@ -585,8 +590,13 @@ export function setupTrackEditor(options: EditorOptions): void {
   });
 
   const endPointer = (event: PointerEvent): void => {
+    const wasGesture = gestureState !== null;
     pointers.delete(event.pointerId);
     if (pointers.size < 2) gestureState = null;
+    if (wasGesture && pointers.size === 0) {
+      renderMap();
+      return;
+    }
     if (dragState && pointers.size === 0) { dragState = null; render(); }
   };
   map.addEventListener('pointerup', endPointer);
