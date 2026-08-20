@@ -1,10 +1,22 @@
 const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window);
 const nativeCancelAnimationFrame = window.cancelAnimationFrame.bind(window);
+const nativePerformanceNow = performance.now.bind(performance);
 
 let paused = false;
 let pauseStartedAt = 0;
 let accumulatedPauseMs = 0;
 let nextId = 1;
+
+const gameNow = (): number => nativePerformanceNow() - accumulatedPauseMs;
+
+// Keep imperative input timestamps (lane changes, keyboard, pointer events) on the
+// same virtual clock used by requestAnimationFrame below. Otherwise, after spending
+// time in the editor, performance.now() would be ahead of RAF timestamps by the
+// accumulated pause duration and lane transitions could remain stuck at progress 0.
+Object.defineProperty(performance, 'now', {
+  configurable: true,
+  value: gameNow,
+});
 
 const queued = new Map<number, FrameRequestCallback>();
 const live = new Map<number, number>();
@@ -40,12 +52,12 @@ window.cancelAnimationFrame = ((id: number): void => {
 const pause = (): void => {
   if (paused) return;
   paused = true;
-  pauseStartedAt = performance.now();
+  pauseStartedAt = nativePerformanceNow();
 };
 
 const resume = (): void => {
   if (!paused) return;
-  accumulatedPauseMs += performance.now() - pauseStartedAt;
+  accumulatedPauseMs += nativePerformanceNow() - pauseStartedAt;
   paused = false;
 
   const pending = [...queued.entries()];
