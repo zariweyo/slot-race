@@ -1,5 +1,12 @@
-const CACHE_NAME = 'photon-circuit-shell-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-icon.svg'];
+const scriptUrl = new URL(self.location.href);
+const APP_VERSION = scriptUrl.searchParams.get('v') || 'dev';
+const BASE_PATH = new URL('./', scriptUrl).pathname;
+const CACHE_NAME = `photon-circuit-${APP_VERSION}`;
+const APP_SHELL = [
+  BASE_PATH,
+  `${BASE_PATH}manifest.webmanifest`,
+  `${BASE_PATH}pwa-icon.svg`,
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -9,7 +16,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.startsWith('photon-circuit-') && key !== CACHE_NAME)
+          .map((key) => caches.delete(key)),
+      ))
       .then(() => self.clients.claim()),
   );
 });
@@ -25,25 +36,26 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/', copy));
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(BASE_PATH, copy));
+          }
           return response;
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(BASE_PATH)),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request).then((response) => {
+    fetch(request)
+      .then((response) => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         }
         return response;
-      });
-      return cached || network;
-    }),
+      })
+      .catch(() => caches.match(request)),
   );
 });
