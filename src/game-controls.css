@@ -1,0 +1,76 @@
+.rail-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.rail-control {
+  --rail-color: #27e7ff;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: clamp(64px, 9.2%, 118px);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--rail-color) 18%, #020711 82%);
+  color: var(--rail-color);
+  opacity: .72;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  cursor: pointer;
+  transition: opacity 90ms linear, background 90ms linear, box-shadow 90ms linear;
+  overflow: hidden;
+}
+
+.rail-control::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--rail-color) 12%, transparent), transparent);
+  pointer-events: none;
+}
+
+.rail-control-left { left: 0; }
+.rail-control-right { right: 0; --rail-color: #b76cff; }
+
+.rail-control svg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(68px, 72%);
+  height: auto;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--rail-color) 58%, transparent));
+}
+
+.rail-control .remote-body,
+.rail-control .remote-wave,
+.rail-control .remote-antenna {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rail-control .remote-body { stroke-width: 5; }
+.rail-control .remote-antenna { stroke-width: 5; }
+.rail-control .remote-wave { stroke-width: 4; }
+.rail-control .remote-dot { fill: currentColor; }
+
+.rail-control.is-selected { opacity: .88; }
+.rail-control.is-pressed {
+  opacity: 1;
+  background: color-mix(in srgb, var(--rail-color) 30%, #020711 70%);
+  box-shadow: inset 0 0 42px color-mix(in srgb, var(--rail-color) 28%, transparent);
+}
+
+@media (max-width: 760px) {
+  .rail-control { width: clamp(54px, 11vw, 86px); }
+  .rail-control svg { width: min(54px, 70%); }
+}
