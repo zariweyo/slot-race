@@ -1,0 +1,73 @@
+.track-editor-panel { position: relative; }
+.track-editor-header { min-height: 52px; }
+.track-editor-header-actions { display: flex; align-items: center; gap: 8px; }
+.track-editor-tabs { display: flex; gap: 4px; }
+.track-editor-tabs button { min-height: 30px; padding: 5px 12px; font-size: 10px; opacity: .58; }
+.track-editor-tabs button.active { opacity: 1; color: #dffcff; border-color: #55eaff; background: rgba(18,92,112,.45); }
+.track-editor-settings-button { width: 34px; font-size: 16px !important; }
+.track-editor-workspace { display: block !important; position: relative; flex: 1; min-height: 0; }
+.track-editor-sequence, .track-editor-preview { position: absolute; inset: 0; border: 0 !important; }
+.track-editor-sequence.tab-hidden, .track-editor-preview.tab-hidden { display: none !important; }
+.track-editor-preview { background: #030812; }
+.track-editor-preview .track-editor-section-head { min-height: 40px; padding: 5px 10px; }
+.track-editor-map-frame { margin: 0 8px 8px; min-height: 0; border-radius: 8px; }
+#track-editor-map { width: 100%; height: 100%; touch-action: none; }
+.track-editor-levels { min-height: 24px; padding: 0 10px 5px; }
+.track-editor-map-handle { cursor: grab; filter: drop-shadow(0 0 6px rgba(255,255,255,.8)); }
+.track-editor-map-handle:active { cursor: grabbing; }
+.track-editor-slot-toolbar {
+  position: absolute; z-index: 12; top: 10px; left: 10px; display: flex; align-items: center; gap: 6px;
+  padding: 6px 7px; border: 1px solid rgba(101,245,255,.38); border-radius: 8px;
+  background: rgba(3,11,21,.88); backdrop-filter: blur(8px); box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+.track-editor-slot-toolbar[hidden] { display: none !important; }
+.track-editor-slot-toolbar span { max-width: 240px; color: #dffcff; font: 800 9px monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-editor-slot-toolbar button { width: 32px; min-height: 32px; padding: 0; font-size: 18px; }
+.track-editor-add-popup {
+  position: absolute; z-index: 13; top: 54px; left: 10px; display: grid; grid-template-columns: repeat(2, minmax(86px,1fr)); gap: 6px;
+  padding: 10px; border: 1px solid rgba(101,245,255,.35); border-radius: 9px; background: rgba(3,11,21,.96);
+  box-shadow: 0 14px 35px rgba(0,0,0,.45); backdrop-filter: blur(10px);
+}
+.track-editor-add-popup[hidden] { display: none !important; }
+.track-editor-add-popup strong { grid-column: 1 / -1; color: #83dbe9; font: 800 9px monospace; }
+.track-editor-add-popup button { min-height: 34px; }
+.track-editor-settings-panel {
+  position: absolute; z-index: 30; top: 54px; right: 8px; width: min(520px, calc(100% - 16px)); max-height: calc(100% - 62px);
+  display: none; overflow: auto; border: 1px solid rgba(124,238,255,.35); border-radius: 10px;
+  background: rgba(5,11,22,.985); box-shadow: 0 18px 60px rgba(0,0,0,.62); backdrop-filter: blur(12px);
+}
+.track-editor-settings-panel.open { display: block; }
+.track-editor-settings-title { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid rgba(124,238,255,.13); }
+.track-editor-settings-title > div { display: grid; gap: 2px; }
+.track-editor-settings-title strong { font-size: 13px; }
+.track-editor-settings-title span { color: #668b9d; font: 9px monospace; }
+.track-editor-settings-title > button { width: 30px; min-height: 30px; padding: 0; font-size: 18px; }
+.track-editor-settings-panel .track-editor-meta { display: grid !important; grid-template-columns: 1fr 1fr 100px; position: static; border-bottom: 1px solid rgba(124,238,255,.1); }
+.track-editor-settings-panel .track-editor-file-actions { display: flex !important; padding: 10px 12px; border-bottom: 1px solid rgba(124,238,255,.1); }
+.track-editor-settings-panel .track-editor-footer { display: grid !important; grid-template-columns: 1fr auto; gap: 8px; padding: 10px 12px; }
+.track-editor-settings-panel .track-editor-load-group { grid-column: 1 / -1; min-width: 0; }
+.track-editor-settings-panel .track-editor-status { text-align: left; align-self: center; }
+.track-editor-sequence { padding: 0; }
+.track-editor-sequence .track-editor-section-head { min-height: 42px; }
+.track-editor-row { grid-template-columns: 32px 110px minmax(150px,1fr) 36px !important; }
+.track-editor-row > button.danger { width: 30px; min-height: 30px; padding: 0; font-size: 16px; }
+.track-editor-map-error { pointer-events: none; }
+@media (max-width: 760px) {
+  .track-editor-header { padding: max(6px,env(safe-area-inset-top)) 8px 6px; }
+  .track-editor-header > div:first-child { display: none; }
+  .track-editor-header-actions { width: 100%; justify-content: space-between; }
+  .track-editor-tabs { flex: 1; }
+  .track-editor-tabs button { flex: 1; min-height: 36px; }
+  .track-editor-settings-button, .track-editor-close { width: 38px; min-height: 36px; }
+  .track-editor-preview .track-editor-section-head { min-height: 36px; }
+  .track-editor-map-frame { margin: 0 4px 4px; border-radius: 5px; }
+  .track-editor-levels { display: none; }
+  .track-editor-slot-toolbar { top: 7px; left: 7px; max-width: calc(100% - 14px); }
+  .track-editor-slot-toolbar span { max-width: 180px; }
+  .track-editor-add-popup { top: 51px; left: 7px; }
+  .track-editor-settings-panel { top: 50px; right: 4px; width: calc(100% - 8px); max-height: calc(100% - 54px); }
+  .track-editor-settings-panel .track-editor-meta { grid-template-columns: 1fr 90px; }
+  .track-editor-settings-panel .track-editor-meta label:first-child { grid-column: 1 / -1; }
+  .track-editor-row { grid-template-columns: 26px 96px minmax(130px,1fr) 34px !important; min-height: 52px; }
+  .track-editor-fields { grid-column: auto !important; grid-row: auto !important; }
+}
