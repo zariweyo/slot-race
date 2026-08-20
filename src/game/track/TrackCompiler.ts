@@ -1,14 +1,5 @@
-export type StraightSegment = {
-  type: 'straight';
-  length: number;
-};
-
-export type CurveSegment = {
-  type: 'curve';
-  length: number;
-  angle: number;
-};
-
+export type StraightSegment = { type: 'straight'; length: number };
+export type CurveSegment = { type: 'curve'; length: number; angle: number };
 export type UpSegment = { type: 'up' };
 export type DownSegment = { type: 'down' };
 
@@ -23,10 +14,7 @@ export type TrackDefinition = {
   autoClose?: boolean;
   start: { x: number; y: number; heading: number; level?: number };
   road: { width: number; lanes: number; laneSpacing: number };
-  levels: {
-    height: number;
-    rampLength: number;
-  };
+  levels: { height: number; rampLength: number };
   segments: TrackSegment[];
 };
 
@@ -69,6 +57,14 @@ export type SegmentRange = {
   curveSign: -1 | 0 | 1;
 };
 
+export type TrackValidation = {
+  playable: boolean;
+  reason: string | null;
+  startLevel: number;
+  finalLevel: number;
+  hasAutoClose: boolean;
+};
+
 export type CompiledTrack = {
   definition: TrackDefinition;
   points: WorldPoint[];
@@ -77,6 +73,8 @@ export type CompiledTrack = {
   segments: SegmentRange[];
   minLevel: number;
   maxLevel: number;
+  validation: TrackValidation;
+  autoCloseRange: SegmentRange | null;
 };
 
 const DEG = Math.PI / 180;
@@ -114,9 +112,9 @@ function segmentIntersection(
   return { x: a0.x + ax * ta, y: a0.y + ay * ta, ta, tb };
 }
 
-export function compileTrack(definition: TrackDefinition, sampleStep = 6): CompiledTrack {
+export function compileTrack(definition: TrackDefinition, sampleStep = 6, strict = true): CompiledTrack {
   if (definition.version !== 2) throw new Error(`Unsupported track version: ${definition.version}`);
-  if (!definition.closed) throw new Error('Tracks must be cyclic/closed');
+  if (strict && !definition.closed) throw new Error('Tracks must be cyclic/closed');
   if ((definition.speedMultiplier ?? 1) <= 0) throw new Error('speedMultiplier must be > 0');
   if (definition.levels.height <= 0 || definition.levels.rampLength <= 0) {
     throw new Error('levels.height and levels.rampLength must be > 0');
@@ -129,6 +127,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
   let heading = definition.start.heading * DEG;
   let distance = 0;
   let level = definition.start.level ?? 0;
+  const startLevel = level;
   let minLevel = level;
   let maxLevel = level;
 
@@ -143,18 +142,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
     renderLevel: number,
     rampDirection: -1 | 0 | 1,
   ): void => {
-    points.push({
-      x,
-      y,
-      distance,
-      segmentIndex,
-      segmentType,
-      curveSign,
-      level: pointLevel,
-      elevation,
-      renderLevel,
-      rampDirection,
-    });
+    points.push({ x, y, distance, segmentIndex, segmentType, curveSign, level: pointLevel, elevation, renderLevel, rampDirection });
   };
 
   const firstType = definition.segments[0]?.type ?? 'straight';
@@ -164,7 +152,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
     const length = segmentLength(segment, definition.levels.rampLength);
     const steps = Math.max(2, Math.ceil(length / sampleStep));
     const startDistance = distance;
-    const startLevel = level;
+    const segmentStartLevel = level;
     let endLevel = level;
     let curveSign: -1 | 0 | 1 = 0;
 
@@ -175,16 +163,15 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
     if (segment.type === 'up' || segment.type === 'down') {
       const direction: -1 | 1 = segment.type === 'up' ? 1 : -1;
       endLevel = level + direction;
-      const renderLevel = Math.max(startLevel, endLevel);
+      const renderLevel = Math.max(segmentStartLevel, endLevel);
       const step = length / steps;
       for (let i = 1; i <= steps; i += 1) {
         const t = i / steps;
         x += Math.cos(heading) * step;
         y += Math.sin(heading) * step;
         distance += step;
-        const progress = smootherstep(t);
-        const elevation = lerp(startLevel, endLevel, progress) * definition.levels.height;
-        const pointLevel = t < 0.5 ? startLevel : endLevel;
+        const elevation = lerp(segmentStartLevel, endLevel, smootherstep(t)) * definition.levels.height;
+        const pointLevel = t < 0.5 ? segmentStartLevel : endLevel;
         push(segmentIndex, segment.type, 0, pointLevel, elevation, renderLevel, direction);
       }
       level = endLevel;
@@ -216,25 +203,29 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
       heading += totalAngle;
     }
 
-    minLevel = Math.min(minLevel, startLevel, endLevel);
-    maxLevel = Math.max(maxLevel, startLevel, endLevel);
+    minLevel = Math.min(minLevel, segmentStartLevel, endLevel);
+    maxLevel = Math.max(maxLevel, segmentStartLevel, endLevel);
     ranges.push({
       segmentIndex,
       type: segment.type,
       start: startDistance,
       end: distance,
-      startLevel,
+      startLevel: segmentStartLevel,
       endLevel,
-      renderLevel: Math.max(startLevel, endLevel),
+      renderLevel: Math.max(segmentStartLevel, endLevel),
       curveSign,
     });
   });
 
-  if (level !== (definition.start.level ?? 0)) {
-    throw new Error(`Closed track finishes at level ${level}, but starts at level ${definition.start.level ?? 0}`);
-  }
+  const levelsMatch = level === startLevel;
+  let validationReason: string | null = null;
+  if (!definition.closed) validationReason = 'La pista está abierta';
+  else if (!levelsMatch) validationReason = `La pista termina en Z${level * 2 + 1} y empieza en Z${startLevel * 2 + 1}`;
 
-  if (definition.autoClose !== false) {
+  if (strict && validationReason) throw new Error(validationReason);
+
+  let autoCloseRange: SegmentRange | null = null;
+  if (definition.closed && levelsMatch && definition.autoClose !== false) {
     const first = points[0];
     const last = points[points.length - 1];
     const closeLength = Math.hypot(first.x - last.x, first.y - last.y);
@@ -262,7 +253,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
           rampDirection: 0,
         });
       }
-      ranges.push({
+      autoCloseRange = {
         segmentIndex: closeSegmentIndex,
         type: 'straight',
         start: startDistance,
@@ -271,7 +262,8 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
         endLevel: level,
         renderLevel: level,
         curveSign: 0,
-      });
+      };
+      ranges.push(autoCloseRange);
     }
   }
 
@@ -292,8 +284,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
       const distanceA = lerp(a0.distance, a1.distance, hit.ta);
       const distanceB = lerp(b0.distance, b1.distance, hit.tb);
       if (Math.abs(distanceA - distanceB) < minSeparation) continue;
-      const duplicate = crossings.some((crossing) => Math.hypot(crossing.x - hit.x, crossing.y - hit.y) < 20);
-      if (duplicate) continue;
+      if (crossings.some((crossing) => Math.hypot(crossing.x - hit.x, crossing.y - hit.y) < 20)) continue;
 
       const elevationA = lerp(a0.elevation, a1.elevation, hit.ta);
       const elevationB = lerp(b0.elevation, b1.elevation, hit.tb);
@@ -325,5 +316,13 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6): Compi
     segments: ranges,
     minLevel,
     maxLevel,
+    validation: {
+      playable: validationReason === null,
+      reason: validationReason,
+      startLevel,
+      finalLevel: level,
+      hasAutoClose: autoCloseRange !== null,
+    },
+    autoCloseRange,
   };
 }
