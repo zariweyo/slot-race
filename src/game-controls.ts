@@ -1,3 +1,5 @@
+import './pwa';
+
 type RailSide = 'left' | 'right';
 
 const buttons = new Map<RailSide, HTMLButtonElement>();
