@@ -323,8 +323,32 @@ async function main(): Promise<void> {
     const host = document.createElement('div'); host.className = 'pixi-level'; host.style.zIndex = String(level * 2 + 1); stack.appendChild(host); const app = await createPixiApp(host); app.stage.sortableChildren = true; levelRenderers.push({ level, app });
   }
 
-  const startPoint = sample(0, 0); const startSvg = levelSvgs.get(startPoint.renderLevel);
-  if (startSvg) { const cells = 12; for (let i = 0; i < cells; i += 1) { const a = -roadHalfWidth + (i / cells) * roadHalfWidth * 2; const b = -roadHalfWidth + ((i + 1) / cells) * roadHalfWidth * 2; const p0 = sample(0, a); const p1 = sample(0, b); const line = svgPath(`M${p0.x.toFixed(2)},${p0.y.toFixed(2)} L${p1.x.toFixed(2)},${p1.y.toFixed(2)}`, i % 2 === 0 ? '#ffffff' : '#111827', 12, 1, 'butt'); line.style.filter = i % 2 === 0 ? 'drop-shadow(0 0 5px rgba(255,255,255,.9))' : 'none'; startSvg.appendChild(line); } }
+  const startPoint = sample(0, 0);
+  const startSvg = levelSvgs.get(startPoint.renderLevel);
+  const startNormal = cache[0];
+  if (startSvg && startNormal) {
+    const tangentX = -startNormal.worldNy;
+    const tangentY = startNormal.worldNx;
+    const drawFinishLine = (forwardOffset: number): void => {
+      const centerX = startPoint.worldX + tangentX * forwardOffset;
+      const centerY = startPoint.worldY + tangentY * forwardOffset;
+      const a = projectIso(
+        centerX - startNormal.worldNx * (roadHalfWidth + 3),
+        centerY - startNormal.worldNy * (roadHalfWidth + 3),
+        startPoint.elevation,
+      );
+      const b = projectIso(
+        centerX + startNormal.worldNx * (roadHalfWidth + 3),
+        centerY + startNormal.worldNy * (roadHalfWidth + 3),
+        startPoint.elevation,
+      );
+      const line = svgPath(`M${a.x.toFixed(2)},${a.y.toFixed(2)} L${b.x.toFixed(2)},${b.y.toFixed(2)}`, '#ffffff', 2.2, 0.96, 'butt');
+      line.style.filter = 'drop-shadow(0 0 2px rgba(255,255,255,.65))';
+      startSvg.appendChild(line);
+    };
+    drawFinishLine(-5);
+    drawFinishLine(5);
+  }
 
   compiled.segments.filter((segment) => segment.type === 'curve').forEach((segment, curveIndex) => { const svg = levelSvgs.get(segment.renderLevel); if (!svg || segment.curveSign === 0) return; for (let i = 0; i < 5; i += 1) { const p = sample(segment.start + (segment.end - segment.start) * (0.35 + i * 0.06), 0); const text = document.createElementNS(SVG_NS, 'text'); text.textContent = '›››'; text.setAttribute('x', p.x.toFixed(2)); text.setAttribute('y', p.y.toFixed(2)); text.setAttribute('class', `curve-chevron ${curveIndex % 2 === 0 ? 'cyan' : 'magenta'}`); text.setAttribute('transform', `rotate(${(p.angle * 180 / Math.PI).toFixed(2)} ${p.x.toFixed(2)} ${p.y.toFixed(2)})`); text.style.animationDelay = `${i * 105}ms`; svg.appendChild(text); } });
 
@@ -333,11 +357,13 @@ async function main(): Promise<void> {
   for (const renderer of levelRenderers) { const visual = createCubeVisual(racerColor); visual.trail.zIndex = 0; visual.root.zIndex = 10000; renderer.app.stage.addChild(visual.trail, visual.root); visuals.set(renderer.level, visual); }
 
   const now = performance.now();
+  const raceStartedAt = now;
   const racer: Racer = { color: racerColor, distance: 0, laneOffset: -laneOffset, laneFrom: -laneOffset, laneTarget: -laneOffset, laneChangeStartedAt: now, visuals, trailHistory: [], laps: 0, currentLapStartedAt: now, lastLapMs: null, bestLapMs: null };
 
-  const mainTimer = new Text({ text: '0.000', style: new TextStyle({ fill: '#ffffff', fontSize: 42, fontFamily: 'monospace', fontWeight: '800', align: 'center', stroke: { color: '#07111f', width: 5 } }) }); mainTimer.anchor.set(0.5, 0); mainTimer.position.set(WIDTH / 2, 16); uiApp.stage.addChild(mainTimer);
-  const lapHud = new Text({ text: '', style: new TextStyle({ fill: '#cfeff5', fontSize: 18, fontFamily: 'monospace', lineHeight: 24, fontWeight: '700', align: 'center' }) }); lapHud.anchor.set(0.5, 0); lapHud.position.set(WIDTH / 2, 68); uiApp.stage.addChild(lapHud);
-  const centerHud = new Text({ text: '', style: new TextStyle({ fill: '#7d97a8', fontSize: 12, fontFamily: 'monospace', align: 'center' }) }); centerHud.anchor.set(0.5, 0); centerHud.position.set(WIDTH / 2, 124); uiApp.stage.addChild(centerHud);
+  const mainTimer = new Text({ text: '0.000', style: new TextStyle({ fill: '#ffffff', fontSize: 42, fontFamily: 'monospace', fontWeight: '800', align: 'center', stroke: { color: '#07111f', width: 5 } }) }); mainTimer.anchor.set(0.5, 0); mainTimer.position.set(WIDTH / 2, 12); uiApp.stage.addChild(mainTimer);
+  const totalTimer = new Text({ text: 'TOTAL 0.000', style: new TextStyle({ fill: '#8feaff', fontSize: 19, fontFamily: 'monospace', fontWeight: '700', align: 'center', stroke: { color: '#07111f', width: 3 } }) }); totalTimer.anchor.set(0.5, 0); totalTimer.position.set(WIDTH / 2, 62); uiApp.stage.addChild(totalTimer);
+  const lapHud = new Text({ text: '', style: new TextStyle({ fill: '#cfeff5', fontSize: 16, fontFamily: 'monospace', lineHeight: 22, fontWeight: '700', align: 'center' }) }); lapHud.anchor.set(0.5, 0); lapHud.position.set(WIDTH / 2, 88); uiApp.stage.addChild(lapHud);
+  const centerHud = new Text({ text: '', style: new TextStyle({ fill: '#7d97a8', fontSize: 12, fontFamily: 'monospace', align: 'center' }) }); centerHud.anchor.set(0.5, 0); centerHud.position.set(WIDTH / 2, 116); uiApp.stage.addChild(centerHud);
 
   boot?.remove(); setupTrackEditor({ current: definition });
   const cyanButton = new Graphics(); cyanButton.roundRect(34, HEIGHT - 116, 210, 78, 22).fill({ color: 0x27e7ff, alpha: 0.24 }).stroke({ width: 4, color: 0x27e7ff, alpha: 0.95 }); uiApp.stage.addChild(cyanButton);
@@ -370,7 +396,7 @@ async function main(): Promise<void> {
     if (crossedStart) { const lapMs = timestamp - racer.currentLapStartedAt; racer.currentLapStartedAt = timestamp; racer.laps += 1; racer.lastLapMs = lapMs; racer.bestLapMs = racer.bestLapMs === null ? lapMs : Math.min(racer.bestLapMs, lapMs); }
     renderRacer(sample(racer.distance, racer.laneOffset), timestamp); for (const renderer of levelRenderers) renderer.app.renderer.render(renderer.app.stage);
     frames += 1; elapsed += deltaMs; if (elapsed >= 500) { fps = (frames * 1000) / elapsed; frames = 0; elapsed = 0; }
-    mainTimer.text = formatLap(timestamp - racer.currentLapStartedAt); lapHud.text = `VUELTA ${racer.laps + 1}   ·   ÚLT ${formatLap(racer.lastLapMs)}   ·   BEST ${formatLap(racer.bestLapMs)}`; centerHud.text = `${definition.name}   ·   FPS ${fps.toFixed(0)}`;
+    mainTimer.text = formatLap(timestamp - racer.currentLapStartedAt); totalTimer.text = `TOTAL ${formatLap(timestamp - raceStartedAt)}`; lapHud.text = `VUELTA ${racer.laps + 1}   ·   ÚLT ${formatLap(racer.lastLapMs)}   ·   BEST ${formatLap(racer.bestLapMs)}`; centerHud.text = `${definition.name}   ·   FPS ${fps.toFixed(0)}`;
     const onCyan = racer.laneTarget < 0; cyanButton.alpha = onCyan ? 1 : 0.48; violetButton.alpha = onCyan ? 0.48 : 1; uiApp.renderer.render(uiApp.stage); requestAnimationFrame(tick);
   };
   requestAnimationFrame((timestamp) => { lastTime = timestamp; racer.currentLapStartedAt = timestamp; tick(timestamp); });
