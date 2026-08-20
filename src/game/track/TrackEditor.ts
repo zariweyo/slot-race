@@ -1,15 +1,14 @@
 import { compileTrack, type TrackDefinition, type TrackSegment } from './TrackCompiler';
 import { listTracks, saveTrack, setActiveTrackId } from './TrackStorage';
 
-type EditorOptions = {
-  current: TrackDefinition;
-};
+type EditorOptions = { current: TrackDefinition };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const MAP_WIDTH = 420;
 const MAP_HEIGHT = 300;
 const MAP_PADDING = 26;
 const LEVEL_COLORS = ['#62efff', '#ff6bdc', '#ffd166', '#7cf29a', '#ff765f', '#b99cff'];
+const AUTO_CLOSE_COLOR = '#ff9f43';
 const SEGMENT_TYPES: Array<{ type: TrackSegment['type']; label: string }> = [
   { type: 'straight', label: 'Recta' },
   { type: 'curve', label: 'Curva' },
@@ -106,9 +105,15 @@ export function setupTrackEditor(options: EditorOptions): void {
     mapError.textContent = '';
 
     try {
-      const compiled = compileTrack(draft, 8);
-      availableLayers = compiled.maxLevel + 1;
+      const compiled = compileTrack(draft, 8, false);
+      availableLayers = Math.max(1, compiled.maxLevel + 1);
       if (visibleLayer !== null && visibleLayer >= availableLayers) visibleLayer = null;
+
+      if (compiled.points.length === 0) {
+        mapInfo.textContent = 'Sin geometría';
+        mapError.textContent = 'Añade un slot para comenzar';
+        return;
+      }
 
       const bounds = compiled.points.reduce((acc, point) => ({
         minX: Math.min(acc.minX, point.x),
@@ -122,12 +127,14 @@ export function setupTrackEditor(options: EditorOptions): void {
       const offsetX = (MAP_WIDTH - width * scale) / 2 - bounds.minX * scale;
       const offsetY = (MAP_HEIGHT - height * scale) / 2 - bounds.minY * scale;
       const roadWidth = Math.max(7, Math.min(28, draft.road.width * scale));
+      const autoCloseSegmentIndex = draft.segments.length;
 
-      const pathForLayer = (layer: number): string => {
+      const pathForLayer = (layer: number, autoClose: boolean): string => {
         let path = '';
         let drawing = false;
         compiled.points.forEach((point) => {
-          if (point.renderLevel !== layer) {
+          const isAutoClose = point.segmentIndex === autoCloseSegmentIndex;
+          if (point.renderLevel !== layer || isAutoClose !== autoClose) {
             drawing = false;
             return;
           }
@@ -148,22 +155,35 @@ export function setupTrackEditor(options: EditorOptions): void {
         levels.appendChild(chip);
 
         if (visibleLayer !== null && visibleLayer !== layer) continue;
-        const d = pathForLayer(layer);
-        if (!d) continue;
+        const d = pathForLayer(layer, false);
+        if (d) {
+          const outline = svgElement('path');
+          outline.setAttribute('d', d);
+          outline.setAttribute('class', 'track-editor-map-outline');
+          outline.setAttribute('stroke-width', String(roadWidth + 3));
+          map.appendChild(outline);
 
-        const outline = svgElement('path');
-        outline.setAttribute('d', d);
-        outline.setAttribute('class', 'track-editor-map-outline');
-        outline.setAttribute('stroke-width', String(roadWidth + 3));
-        map.appendChild(outline);
+          const track = svgElement('path');
+          track.setAttribute('d', d);
+          track.setAttribute('class', 'track-editor-map-track');
+          track.setAttribute('stroke', color);
+          track.setAttribute('stroke-width', String(roadWidth));
+          track.setAttribute('opacity', visibleLayer === null ? '0.72' : '0.92');
+          map.appendChild(track);
+        }
 
-        const track = svgElement('path');
-        track.setAttribute('d', d);
-        track.setAttribute('class', 'track-editor-map-track');
-        track.setAttribute('stroke', color);
-        track.setAttribute('stroke-width', String(roadWidth));
-        track.setAttribute('opacity', visibleLayer === null ? '0.72' : '0.92');
-        map.appendChild(track);
+        const closePath = pathForLayer(layer, true);
+        if (closePath) {
+          const closure = svgElement('path');
+          closure.setAttribute('d', closePath);
+          closure.setAttribute('fill', 'none');
+          closure.setAttribute('stroke', AUTO_CLOSE_COLOR);
+          closure.setAttribute('stroke-width', String(Math.max(5, roadWidth * 0.55)));
+          closure.setAttribute('stroke-dasharray', '10 8');
+          closure.setAttribute('stroke-linecap', 'round');
+          closure.setAttribute('opacity', '0.95');
+          map.appendChild(closure);
+        }
       }
 
       const start = compiled.points[0];
@@ -177,12 +197,15 @@ export function setupTrackEditor(options: EditorOptions): void {
       }
 
       layerButton.textContent = visibleLayer === null ? 'CAPAS: TODAS' : `CAPA: ${visibleLayer}`;
-      mapInfo.textContent = `${Math.round(compiled.totalLength)} u · ${availableLayers} ${availableLayers === 1 ? 'capa' : 'capas'}`;
+      const playState = compiled.validation.playable ? 'JUGABLE' : 'NO JUGABLE';
+      mapInfo.textContent = `${Math.round(compiled.totalLength)} u · ${availableLayers} ${availableLayers === 1 ? 'capa' : 'capas'} · ${playState}`;
+      if (compiled.validation.reason) mapError.textContent = compiled.validation.reason;
+      else if (compiled.validation.hasAutoClose) mapError.textContent = 'Cierre automático mostrado en naranja';
     } catch (error) {
       availableLayers = 1;
       visibleLayer = null;
       layerButton.textContent = 'CAPAS: TODAS';
-      mapInfo.textContent = 'Vista no disponible';
+      mapInfo.textContent = 'Geometría inválida';
       mapError.textContent = error instanceof Error ? error.message : String(error);
     }
   };
@@ -402,7 +425,7 @@ export function setupTrackEditor(options: EditorOptions): void {
       draft.name = nameInput.value.trim() || 'Circuito sin título';
       draft.id = idInput.value.trim().replace(/[^a-zA-Z0-9_-]/g, '-') || `track-${Date.now()}`;
       draft.speedMultiplier = Math.max(0.1, Number(speedInput.value) || 1);
-      compileTrack(draft, 8);
+      compileTrack(draft, 8, true);
       await saveTrack(draft);
       setActiveTrackId(draft.id);
       setStatus('Guardado. Cargando circuito…');
