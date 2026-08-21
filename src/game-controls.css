@@ -70,6 +70,48 @@
   box-shadow: inset 0 0 42px color-mix(in srgb, var(--rail-color) 28%, transparent);
 }
 
+.rail-control.is-recommended:not(.is-pressed) {
+  animation: recommendedControlPulse .72s ease-in-out infinite;
+}
+
+@keyframes recommendedControlPulse {
+  0%, 100% { opacity: .72; box-shadow: inset 0 0 16px color-mix(in srgb, var(--rail-color) 12%, transparent); }
+  50% { opacity: 1; box-shadow: inset 0 0 54px color-mix(in srgb, var(--rail-color) 38%, transparent); }
+}
+
+.racing-line-recommended {
+  opacity: 1 !important;
+  stroke-width: 4.2 !important;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.racing-line-sparks {
+  position: absolute;
+  z-index: 1300;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  color: #27e7ff;
+}
+.racing-line-sparks.right { color: #ff72ee; }
+.racing-line-sparks i {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: racingSpark .4s ease-out forwards;
+}
+.racing-line-sparks i:nth-child(1) { --sx: 28px; --sy: -26px; }
+.racing-line-sparks i:nth-child(2) { --sx: 38px; --sy: 7px; animation-delay: 20ms; }
+.racing-line-sparks i:nth-child(3) { --sx: 14px; --sy: 32px; animation-delay: 35ms; }
+.racing-line-sparks i:nth-child(4) { --sx: -13px; --sy: -34px; animation-delay: 50ms; }
+@keyframes racingSpark {
+  from { opacity: 1; transform: translate(0, 0) scale(1.15); }
+  to { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(.25); }
+}
+
 @media (max-width: 760px) {
   .rail-control { width: clamp(54px, 11vw, 86px); }
   .rail-control svg { width: min(54px, 70%); }
