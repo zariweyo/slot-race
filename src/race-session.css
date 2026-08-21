@@ -19,6 +19,7 @@
 
 .race-session-total,
 .race-session-lap,
+.race-session-stats,
 .race-session-hint,
 .race-results-svg text {
   text-anchor: middle;
@@ -37,6 +38,12 @@
   fill: #8defff;
   font: 800 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 2px;
+}
+
+.race-session-stats {
+  fill: rgba(226, 249, 255, .82);
+  font: 800 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 1.2px;
 }
 
 .race-session-hint {
