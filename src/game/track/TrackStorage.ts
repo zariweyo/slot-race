@@ -66,17 +66,32 @@ export function setActiveTrackId(id: string): void {
   localStorage.setItem(ACTIVE_KEY, id);
 }
 
+function refreshBundledTrack(stored: TrackDefinition, fallback: TrackDefinition): TrackDefinition {
+  if (stored.id !== fallback.id) return stored;
+  return {
+    ...stored,
+    road: structuredClone(fallback.road),
+    laps: fallback.laps ?? stored.laps,
+  };
+}
+
 export async function loadInitialTrack(fallback: TrackDefinition): Promise<TrackDefinition> {
   const activeId = getActiveTrackId();
   if (activeId) {
     const active = await getTrack(activeId);
-    if (active) return active;
+    if (active) {
+      const refreshed = refreshBundledTrack(active, fallback);
+      if (refreshed !== active) await saveTrack(refreshed);
+      return refreshed;
+    }
   }
 
   const existing = await getTrack(fallback.id);
   if (existing) {
-    setActiveTrackId(existing.id);
-    return existing;
+    const refreshed = refreshBundledTrack(existing, fallback);
+    await saveTrack(refreshed);
+    setActiveTrackId(refreshed.id);
+    return refreshed;
   }
 
   await saveTrack(fallback);
