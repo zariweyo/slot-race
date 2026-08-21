@@ -4,8 +4,10 @@ const DB_NAME = 'slot-race';
 const DB_VERSION = 1;
 const STORE = 'tracks';
 const ACTIVE_KEY = 'slot-race.active-track';
+const SETTINGS_PREFIX = 'slot-race.track-settings.';
 
 type StoredTrack = TrackDefinition & { updatedAt: number };
+type TrackSettings = { laps?: number; laneSpacing?: number };
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -25,11 +27,37 @@ function stripMetadata(row: StoredTrack): TrackDefinition {
   return definition as TrackDefinition;
 }
 
+function settingsFor(id: string): TrackSettings | null {
+  try {
+    const raw = localStorage.getItem(`${SETTINGS_PREFIX}${id}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as TrackSettings;
+  } catch {
+    return null;
+  }
+}
+
+function applySettings(definition: TrackDefinition): TrackDefinition {
+  const settings = settingsFor(definition.id);
+  if (!settings) return definition;
+  const laps = Number.isFinite(settings.laps) ? Math.max(1, Math.round(settings.laps!)) : definition.laps;
+  const laneSpacing = Number.isFinite(settings.laneSpacing) ? Math.max(10, Number(settings.laneSpacing)) : definition.road.laneSpacing;
+  return {
+    ...definition,
+    laps,
+    road: {
+      ...definition.road,
+      laneSpacing,
+    },
+  };
+}
+
 export async function saveTrack(definition: TrackDefinition): Promise<void> {
+  const prepared = applySettings(structuredClone(definition));
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put({ ...structuredClone(definition), updatedAt: Date.now() } satisfies StoredTrack);
+    tx.objectStore(STORE).put({ ...prepared, updatedAt: Date.now() } satisfies StoredTrack);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error('Unable to save track'));
   });
@@ -44,7 +72,7 @@ export async function getTrack(id: string): Promise<TrackDefinition | null> {
     request.onerror = () => reject(request.error ?? new Error('Unable to load track'));
   });
   db.close();
-  return result ? stripMetadata(result) : null;
+  return result ? applySettings(stripMetadata(result)) : null;
 }
 
 export async function listTracks(): Promise<TrackDefinition[]> {
@@ -55,7 +83,7 @@ export async function listTracks(): Promise<TrackDefinition[]> {
     request.onerror = () => reject(request.error ?? new Error('Unable to list tracks'));
   });
   db.close();
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt).map(stripMetadata);
+  return rows.sort((a, b) => b.updatedAt - a.updatedAt).map(stripMetadata).map(applySettings);
 }
 
 export function getActiveTrackId(): string | null {
@@ -68,10 +96,14 @@ export function setActiveTrackId(id: string): void {
 
 function refreshBundledTrack(stored: TrackDefinition, fallback: TrackDefinition): TrackDefinition {
   if (stored.id !== fallback.id) return stored;
+  if (stored.laps !== undefined && stored.road.laneSpacing > 0) return stored;
   return {
     ...stored,
-    road: structuredClone(fallback.road),
-    laps: fallback.laps ?? stored.laps,
+    laps: stored.laps ?? fallback.laps ?? 3,
+    road: {
+      ...stored.road,
+      laneSpacing: stored.road.laneSpacing > 0 ? stored.road.laneSpacing : fallback.road.laneSpacing,
+    },
   };
 }
 
@@ -80,7 +112,7 @@ export async function loadInitialTrack(fallback: TrackDefinition): Promise<Track
   if (activeId) {
     const active = await getTrack(activeId);
     if (active) {
-      const refreshed = refreshBundledTrack(active, fallback);
+      const refreshed = applySettings(refreshBundledTrack(active, fallback));
       if (refreshed !== active) await saveTrack(refreshed);
       return refreshed;
     }
@@ -88,13 +120,14 @@ export async function loadInitialTrack(fallback: TrackDefinition): Promise<Track
 
   const existing = await getTrack(fallback.id);
   if (existing) {
-    const refreshed = refreshBundledTrack(existing, fallback);
+    const refreshed = applySettings(refreshBundledTrack(existing, fallback));
     await saveTrack(refreshed);
     setActiveTrackId(refreshed.id);
     return refreshed;
   }
 
-  await saveTrack(fallback);
-  setActiveTrackId(fallback.id);
-  return structuredClone(fallback);
+  const initial = applySettings(structuredClone(fallback));
+  await saveTrack(initial);
+  setActiveTrackId(initial.id);
+  return initial;
 }
