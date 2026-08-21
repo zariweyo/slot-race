@@ -23,10 +23,11 @@ const formatTime = (ms: number): string => {
   const millis = value % 1000;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
 };
+const formatOptionalTime = (ms: number | null): string => ms === null ? '--:--.---' : formatTime(ms);
 
 const svg = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] => document.createElementNS('http://www.w3.org/2000/svg', tag);
 
-const createHud = (laps: number): { root: SVGSVGElement; total: SVGTextElement; lap: SVGTextElement } | null => {
+const createHud = (laps: number): { root: SVGSVGElement; total: SVGTextElement; lap: SVGTextElement; stats: SVGTextElement } | null => {
   const viewport = document.querySelector<HTMLElement>('#game-viewport');
   if (!viewport) return null;
   const root = svg('svg');
@@ -35,33 +36,40 @@ const createHud = (laps: number): { root: SVGSVGElement; total: SVGTextElement; 
   root.setAttribute('aria-hidden', 'true');
 
   const plate = svg('path');
-  plate.setAttribute('d', 'M455 12 H825 Q846 12 852 34 L840 119 Q837 135 817 135 H463 Q443 135 440 119 L428 34 Q434 12 455 12 Z');
+  plate.setAttribute('d', 'M430 12 H850 Q871 12 877 34 L865 135 Q862 151 842 151 H438 Q418 151 415 135 L403 34 Q409 12 430 12 Z');
   plate.setAttribute('class', 'race-session-hud-plate');
   root.appendChild(plate);
 
   const total = svg('text');
   total.setAttribute('x', '640');
-  total.setAttribute('y', '58');
+  total.setAttribute('y', '54');
   total.setAttribute('class', 'race-session-total');
   total.textContent = '00:00.000';
   root.appendChild(total);
 
   const lap = svg('text');
   lap.setAttribute('x', '640');
-  lap.setAttribute('y', '95');
+  lap.setAttribute('y', '91');
   lap.setAttribute('class', 'race-session-lap');
   lap.textContent = `VUELTA 1 / ${laps}`;
   root.appendChild(lap);
 
+  const stats = svg('text');
+  stats.setAttribute('x', '640');
+  stats.setAttribute('y', '116');
+  stats.setAttribute('class', 'race-session-stats');
+  stats.textContent = 'ÚLT --:--.---   ·   BEST --:--.---';
+  root.appendChild(stats);
+
   const hint = svg('text');
   hint.setAttribute('x', '640');
-  hint.setAttribute('y', '120');
+  hint.setAttribute('y', '139');
   hint.setAttribute('class', 'race-session-hint');
   hint.textContent = 'PULSA UN CONTROL PARA EMPEZAR';
   root.appendChild(hint);
 
   viewport.appendChild(root);
-  return { root, total, lap };
+  return { root, total, lap, stats };
 };
 
 const showResults = (totalMs: number, bestLapMs: number | null, laps: number): void => {
@@ -144,7 +152,7 @@ const showResults = (totalMs: number, bestLapMs: number | null, laps: number): v
   best.setAttribute('x', '640');
   best.setAttribute('y', '501');
   best.setAttribute('class', 'race-results-best');
-  best.textContent = bestLapMs === null ? '--:--.---' : formatTime(bestLapMs);
+  best.textContent = formatOptionalTime(bestLapMs);
   overlay.appendChild(best);
 
   const restart = svg('g');
@@ -192,6 +200,7 @@ void (async () => {
   let raceStartedAt = 0;
   let lapStartedAt = 0;
   let completedLaps = 0;
+  let lastLapMs: number | null = null;
   let bestLapMs: number | null = null;
   const pressed = new Set<string>();
 
@@ -244,6 +253,10 @@ void (async () => {
   window.addEventListener('keyup', (event) => pressed.delete(event.code));
   window.addEventListener('blur', () => pressed.clear());
 
+  const updateStats = (): void => {
+    hud.stats.textContent = `ÚLT ${formatOptionalTime(lastLapMs)}   ·   BEST ${formatOptionalTime(bestLapMs)}`;
+  };
+
   const tick = (timestamp: number): void => {
     if (!lastFrame) lastFrame = timestamp;
     const deltaMs = Math.min(40, Math.max(0, timestamp - lastFrame));
@@ -268,7 +281,9 @@ void (async () => {
           const lapMs = timestamp - lapStartedAt;
           lapStartedAt = timestamp;
           completedLaps += 1;
+          lastLapMs = lapMs;
           bestLapMs = bestLapMs === null ? lapMs : Math.min(bestLapMs, lapMs);
+          updateStats();
           if (completedLaps >= targetLaps) {
             finished = true;
             const totalMs = timestamp - raceStartedAt;
@@ -288,5 +303,6 @@ void (async () => {
     requestAnimationFrame(tick);
   };
 
+  updateStats();
   requestAnimationFrame(tick);
 })();
