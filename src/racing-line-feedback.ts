@@ -76,7 +76,7 @@ void (async () => {
     return projectIso(p.x + nx * offset, p.y + ny * offset, center.elevation);
   };
 
-  const sideForCurve = (curveSign: number): Side | null => curveSign > 0 ? 'left' : curveSign < 0 ? 'right' : null;
+  const sideForCurve = (curveSign: number): Side | null => curveSign > 0 ? 'right' : curveSign < 0 ? 'left' : null;
 
   const sparkle = (point: Point, side: Side): void => {
     const viewport = document.querySelector<HTMLElement>('#game-viewport');
