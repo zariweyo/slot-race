@@ -11,7 +11,6 @@ const STORE = 'tracks';
 const meta = document.querySelector<HTMLElement>('.track-editor-meta');
 const idInput = document.querySelector<HTMLInputElement>('#track-editor-id');
 const saveButton = document.querySelector<HTMLButtonElement>('#track-editor-save');
-const settingsButton = document.querySelector<HTMLButtonElement>('.track-editor-settings-button');
 const openButton = document.querySelector<HTMLButtonElement>('#track-editor-open');
 
 const lapsInput = document.createElement('input');
@@ -38,10 +37,26 @@ const createField = (text: string, input: HTMLInputElement): HTMLLabelElement =>
 };
 
 if (meta) {
+  meta.classList.add('has-extra-settings');
   meta.append(
     createField('Vueltas', lapsInput),
     createField('Separación raíles', spacingInput),
   );
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .track-editor-meta.has-extra-settings {
+      grid-template-columns: minmax(170px, 1.35fr) minmax(145px, 1fr) 92px 72px 118px;
+    }
+    .track-editor-meta.has-extra-settings .track-editor-extra-setting input { width: 100%; }
+    @media (max-width: 900px) {
+      .track-editor-meta.has-extra-settings {
+        grid-template-columns: minmax(145px, 1.2fr) minmax(125px, 1fr) 82px 68px 105px;
+        gap: 5px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 const keyFor = (id: string): string => `${SETTINGS_PREFIX}${id}`;
@@ -98,8 +113,13 @@ const persist = (): void => {
 };
 
 saveButton?.addEventListener('click', persist);
-settingsButton?.addEventListener('click', () => { void sync(); });
 openButton?.addEventListener('click', () => { window.setTimeout(() => { void sync(); }, 0); });
+document.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement;
+  if (target.closest('.track-editor-settings-button, #track-editor-new, #track-editor-duplicate')) {
+    window.setTimeout(() => { void sync(); }, 0);
+  }
+});
 
 lapsInput.addEventListener('change', persist);
 spacingInput.addEventListener('change', persist);
