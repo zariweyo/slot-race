@@ -1,0 +1,124 @@
+.race-session-svg,
+.race-results-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.race-session-svg {
+  z-index: 1350;
+  pointer-events: none;
+}
+
+.race-session-hud-plate {
+  fill: rgba(2, 8, 17, .94);
+  stroke: rgba(95, 235, 255, .42);
+  stroke-width: 1.5;
+}
+
+.race-session-total,
+.race-session-lap,
+.race-session-hint,
+.race-results-svg text {
+  text-anchor: middle;
+  dominant-baseline: middle;
+  user-select: none;
+}
+
+.race-session-total {
+  fill: #f4feff;
+  font: 900 42px/1 Arial Black, Arial, sans-serif;
+  letter-spacing: 3px;
+  filter: drop-shadow(0 0 7px rgba(55, 228, 255, .55));
+}
+
+.race-session-lap {
+  fill: #8defff;
+  font: 800 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 2px;
+}
+
+.race-session-hint {
+  fill: rgba(205, 244, 250, .58);
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 1.8px;
+  animation: raceStartHint 1.2s ease-in-out infinite;
+}
+
+.race-session-svg.started .race-session-hint {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes raceStartHint {
+  0%, 100% { opacity: .36; }
+  50% { opacity: .9; }
+}
+
+.race-results-svg {
+  z-index: 6000;
+  pointer-events: auto;
+  animation: raceResultsIn 260ms cubic-bezier(.18,.85,.28,1.15) both;
+}
+
+.race-results-shade {
+  fill: rgba(0, 2, 8, .82);
+}
+
+.race-results-title {
+  fill: #ffffff;
+  font: italic 900 52px/1 Arial Black, Arial, sans-serif;
+  letter-spacing: 4px;
+  filter: drop-shadow(0 0 10px rgba(94, 241, 255, .75));
+}
+
+.race-results-subtitle,
+.race-results-label {
+  fill: #89b9c9;
+  font: 800 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 3px;
+}
+
+.race-results-total {
+  fill: #f4feff;
+  font: 900 55px/1 Arial Black, Arial, sans-serif;
+  letter-spacing: 3px;
+  filter: drop-shadow(0 0 9px rgba(58, 234, 255, .6));
+}
+
+.race-results-best {
+  fill: #ffd76b;
+  font: 900 32px/1 Arial Black, Arial, sans-serif;
+  letter-spacing: 2px;
+  filter: drop-shadow(0 0 8px rgba(255, 193, 68, .45));
+}
+
+.race-results-restart {
+  cursor: pointer;
+  outline: none;
+}
+
+.race-results-restart rect {
+  fill: rgba(18, 83, 105, .78);
+  stroke: #62efff;
+  stroke-width: 2;
+  transition: fill 120ms linear;
+}
+
+.race-results-restart text {
+  fill: #eaffff;
+  font: 900 15px/1 Arial, sans-serif;
+  letter-spacing: 3px;
+  pointer-events: none;
+}
+
+.race-results-restart:hover rect,
+.race-results-restart:focus rect {
+  fill: rgba(35, 134, 161, .9);
+}
+
+@keyframes raceResultsIn {
+  from { opacity: 0; transform: scale(.94); transform-origin: center; }
+  to { opacity: 1; transform: scale(1); transform-origin: center; }
+}
