@@ -3,7 +3,7 @@ import { loadInitialTrack } from './game/track/TrackStorage';
 import { compileTrack, type TrackDefinition } from './game/track/TrackCompiler';
 
 type Side = 'left' | 'right';
-type RacePoint = { distance: number; curvature: number };
+type RacePoint = { curvature: number };
 
 const MAX_SPEED = 1900;
 const ACCELERATION = 850;
@@ -180,7 +180,6 @@ void (async () => {
   const hud = createHud(targetLaps);
   if (!hud || totalLength <= 0) return;
 
-  let selected: Side = 'left';
   let lane = -laneOffset;
   let laneFrom = lane;
   let laneTarget = lane;
@@ -209,11 +208,10 @@ void (async () => {
     const point = points[lo];
     const segment = definition.segments[point.segmentIndex];
     const curvature = segment?.type === 'curve' ? (segment.angle * Math.PI / 180) / segment.length : 0;
-    return { distance: d, curvature };
+    return { curvature };
   };
 
   const chooseLane = (side: Side, timestamp: number): void => {
-    selected = side;
     const target = side === 'left' ? -laneOffset : laneOffset;
     if (Math.abs(laneTarget - target) < 0.01) return;
     laneFrom = lane;
@@ -231,15 +229,16 @@ void (async () => {
 
   window.addEventListener('keydown', (event) => {
     if (finished) return;
+    const now = performance.now();
     if (event.code === 'KeyA' || event.code === 'ArrowLeft') {
       pressed.add(event.code);
-      startRace(performance.now());
-      chooseLane('left', performance.now());
+      startRace(now);
+      chooseLane('left', now);
     }
     if (event.code === 'KeyD' || event.code === 'ArrowRight') {
       pressed.add(event.code);
-      startRace(performance.now());
-      chooseLane('right', performance.now());
+      startRace(now);
+      chooseLane('right', now);
     }
   });
   window.addEventListener('keyup', (event) => pressed.delete(event.code));
