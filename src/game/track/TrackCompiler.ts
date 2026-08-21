@@ -10,6 +10,7 @@ export type TrackDefinition = {
   id: string;
   name: string;
   speedMultiplier?: number;
+  laps?: number;
   closed: boolean;
   autoClose?: boolean;
   start: { x: number; y: number; heading: number; level?: number };
@@ -116,6 +117,7 @@ export function compileTrack(definition: TrackDefinition, sampleStep = 6, strict
   if (definition.version !== 2) throw new Error(`Unsupported track version: ${definition.version}`);
   if (strict && !definition.closed) throw new Error('Tracks must be cyclic/closed');
   if ((definition.speedMultiplier ?? 1) <= 0) throw new Error('speedMultiplier must be > 0');
+  if ((definition.laps ?? 3) < 1 || !Number.isFinite(definition.laps ?? 3)) throw new Error('laps must be >= 1');
   if (definition.levels.height <= 0 || definition.levels.rampLength <= 0) {
     throw new Error('levels.height and levels.rampLength must be > 0');
   }
