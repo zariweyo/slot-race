@@ -14,7 +14,7 @@
   "road": {
     "width": 146,
     "lanes": 2,
-    "laneSpacing": 64
+    "laneSpacing": 100
   },
   "levels": {
     "height": 88,
@@ -47,6 +47,7 @@
 
     { "type": "straight", "length": 520 },
     { "type": "curve", "length": 377, "angle": 180 },
-    { "type": "straight", "length": 520 }
+    { "type": "straight", "length": 520 },
+    { "type": "curve", "length": 377, "angle": 180 }
   ]
 }
