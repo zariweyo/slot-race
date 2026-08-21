@@ -2,17 +2,14 @@ const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window);
 const nativeCancelAnimationFrame = window.cancelAnimationFrame.bind(window);
 const nativePerformanceNow = performance.now.bind(performance);
 
-let paused = false;
 let pauseStartedAt = 0;
 let accumulatedPauseMs = 0;
 let nextId = 1;
+const pauseReasons = new Set<string>();
+const isPaused = (): boolean => pauseReasons.size > 0;
 
 const gameNow = (): number => nativePerformanceNow() - accumulatedPauseMs;
 
-// Keep imperative input timestamps (lane changes, keyboard, pointer events) on the
-// same virtual clock used by requestAnimationFrame below. Otherwise, after spending
-// time in the editor, performance.now() would be ahead of RAF timestamps by the
-// accumulated pause duration and lane transitions could remain stuck at progress 0.
 Object.defineProperty(performance, 'now', {
   configurable: true,
   value: gameNow,
@@ -24,7 +21,7 @@ const live = new Map<number, number>();
 const schedule = (id: number, callback: FrameRequestCallback): void => {
   const nativeId = nativeRequestAnimationFrame((timestamp) => {
     live.delete(id);
-    if (paused) {
+    if (isPaused()) {
       queued.set(id, callback);
       return;
     }
@@ -35,7 +32,7 @@ const schedule = (id: number, callback: FrameRequestCallback): void => {
 
 window.requestAnimationFrame = ((callback: FrameRequestCallback): number => {
   const id = nextId++;
-  if (paused) queued.set(id, callback);
+  if (isPaused()) queued.set(id, callback);
   else schedule(id, callback);
   return id;
 }) as typeof window.requestAnimationFrame;
@@ -49,27 +46,36 @@ window.cancelAnimationFrame = ((id: number): void => {
   }
 }) as typeof window.cancelAnimationFrame;
 
-const pause = (): void => {
-  if (paused) return;
-  paused = true;
+const pause = (reason: string): void => {
+  const wasPaused = isPaused();
+  pauseReasons.add(reason);
+  if (wasPaused) return;
   pauseStartedAt = nativePerformanceNow();
 };
 
-const resume = (): void => {
-  if (!paused) return;
-  accumulatedPauseMs += nativePerformanceNow() - pauseStartedAt;
-  paused = false;
+const resume = (reason: string): void => {
+  if (!pauseReasons.has(reason)) return;
+  pauseReasons.delete(reason);
+  if (isPaused()) return;
 
+  accumulatedPauseMs += nativePerformanceNow() - pauseStartedAt;
   const pending = [...queued.entries()];
   queued.clear();
   for (const [id, callback] of pending) schedule(id, callback);
 };
 
+window.addEventListener('photon:pause', ((event: CustomEvent<{ reason?: string }>) => {
+  pause(event.detail?.reason ?? 'external');
+}) as EventListener);
+window.addEventListener('photon:resume', ((event: CustomEvent<{ reason?: string }>) => {
+  resume(event.detail?.reason ?? 'external');
+}) as EventListener);
+
 const modal = document.querySelector<HTMLElement>('#track-editor-modal');
 if (modal) {
   const sync = (): void => {
-    if (modal.classList.contains('open')) pause();
-    else resume();
+    if (modal.classList.contains('open')) pause('editor');
+    else resume('editor');
   };
 
   new MutationObserver(sync).observe(modal, {
