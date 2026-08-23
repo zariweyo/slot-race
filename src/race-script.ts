@@ -9,6 +9,7 @@ export type RaceScriptAction = {
 };
 
 const STORAGE_KEY = 'slot-race:race-script:v1';
+const PAUSE_REASON = 'race-script-editor';
 const actions: RaceScriptAction[] = [];
 let selectedLap: RaceScriptLap = 'all';
 let runtimeState: 'programming' | 'running' | 'paused' = 'programming';
@@ -18,13 +19,13 @@ let lapStartedAt = 0;
 let currentRail: RaceScriptRail = 'cyan';
 let executed = new Set<string>();
 
+const modal = document.querySelector<HTMLElement>('#race-script-modal');
 const root = document.querySelector<HTMLElement>('#race-script');
+const openButton = document.querySelector<HTMLButtonElement>('#race-script-open');
+const applyButton = document.querySelector<HTMLButtonElement>('#race-script-apply');
 const list = document.querySelector<HTMLDivElement>('#race-script-list');
 const addButton = document.querySelector<HTMLButtonElement>('#race-script-add');
 const tabs = document.querySelector<HTMLDivElement>('#race-script-tabs');
-const runButton = document.querySelector<HTMLButtonElement>('#race-script-run');
-const pauseButton = document.querySelector<HTMLButtonElement>('#race-script-pause');
-const restartButton = document.querySelector<HTMLButtonElement>('#race-script-restart');
 const status = document.querySelector<HTMLElement>('#race-script-status');
 const lapReadout = document.querySelector<HTMLElement>('#race-script-lap');
 const timeReadout = document.querySelector<HTMLElement>('#race-script-time');
@@ -89,6 +90,7 @@ function setRuntimeState(state: 'programming' | 'running' | 'paused'): void {
   root?.classList.toggle('running', state === 'running');
   root?.classList.toggle('paused', state === 'paused');
   if (status) status.textContent = state.toUpperCase();
+  if (applyButton) applyButton.textContent = hasStarted ? 'APLICAR Y REANUDAR' : 'APLICAR Y CORRER';
   render();
 }
 
@@ -118,34 +120,35 @@ function markPastActionsAsHandled(now: number): void {
   }
 }
 
-function startOrResume(): void {
-  if (runtimeState === 'running') return;
-  const resuming = runtimeState === 'paused';
-  if (resuming) window.dispatchEvent(new CustomEvent('photon:resume', { detail: { reason: 'race-script' } }));
+function showEditor(initial = false): void {
+  if (!modal) return;
+  if (!initial && runtimeState === 'running') {
+    releaseRail();
+    setRuntimeState('paused');
+  }
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  window.dispatchEvent(new CustomEvent('photon:pause', { detail: { reason: PAUSE_REASON } }));
+}
+
+function applyAndRun(): void {
+  saveActions();
+  modal?.classList.remove('open');
+  modal?.setAttribute('aria-hidden', 'true');
+  window.dispatchEvent(new CustomEvent('photon:resume', { detail: { reason: PAUSE_REASON } }));
+
   const now = performance.now();
   if (!hasStarted) {
     hasStarted = true;
     currentLap = 1;
     lapStartedAt = now;
     executed = new Set<string>();
-  } else if (resuming) {
+  } else {
     markPastActionsAsHandled(now);
   }
+
   setRuntimeState('running');
   pressRail(currentRail);
-}
-
-function pauseRace(): void {
-  if (runtimeState !== 'running') return;
-  releaseRail();
-  setRuntimeState('paused');
-  window.dispatchEvent(new CustomEvent('photon:pause', { detail: { reason: 'race-script' } }));
-}
-
-function restartRace(): void {
-  saveActions();
-  releaseRail();
-  window.location.reload();
 }
 
 function render(): void {
@@ -171,7 +174,7 @@ function render(): void {
     time.min = '0';
     time.step = '0.001';
     time.value = (action.timeMs / 1000).toFixed(3);
-    time.disabled = Boolean(action.inherited) || runtimeState === 'running';
+    time.disabled = Boolean(action.inherited);
     time.setAttribute('aria-label', 'Tiempo en segundos');
     time.addEventListener('change', () => {
       action.timeMs = parseSeconds(time.value);
@@ -181,13 +184,13 @@ function render(): void {
 
     const rail = document.createElement('select');
     rail.className = `race-script-rail ${action.rail}`;
-    rail.disabled = Boolean(action.inherited) || runtimeState === 'running';
+    rail.disabled = Boolean(action.inherited);
     rail.innerHTML = '<option value="cyan">● CYAN</option><option value="violet">● VIOLET</option>';
     rail.value = action.rail;
     rail.addEventListener('change', () => {
       action.rail = rail.value as RaceScriptRail;
+      rail.className = `race-script-rail ${action.rail}`;
       saveActions();
-      render();
     });
 
     const scope = document.createElement('span');
@@ -198,7 +201,7 @@ function render(): void {
     remove.type = 'button';
     remove.className = 'race-script-remove';
     remove.textContent = '×';
-    remove.disabled = Boolean(action.inherited) || runtimeState === 'running';
+    remove.disabled = Boolean(action.inherited);
     remove.setAttribute('aria-label', 'Eliminar acción');
     remove.addEventListener('click', () => {
       const index = actions.findIndex((entry) => entry.id === action.id);
@@ -210,17 +213,9 @@ function render(): void {
     row.append(time, rail, scope, remove);
     list.appendChild(row);
   }
-
-  if (addButton) addButton.disabled = runtimeState === 'running';
-  if (runButton) {
-    runButton.disabled = runtimeState === 'running';
-    runButton.textContent = runtimeState === 'paused' ? '▶ RESUME' : '▶ RUN';
-  }
-  if (pauseButton) pauseButton.disabled = runtimeState !== 'running';
 }
 
 function addAction(): void {
-  if (runtimeState === 'running') return;
   const targetLap = selectedLap;
   const sameScope = actions.filter((action) => action.lap === targetLap).sort((a, b) => a.timeMs - b.timeMs);
   const lastTime = sameScope.at(-1)?.timeMs ?? 0;
@@ -269,9 +264,8 @@ function runtimeTick(timestamp: number): void {
 }
 
 addButton?.addEventListener('click', addAction);
-runButton?.addEventListener('click', startOrResume);
-pauseButton?.addEventListener('click', pauseRace);
-restartButton?.addEventListener('click', restartRace);
+openButton?.addEventListener('click', () => showEditor(false));
+applyButton?.addEventListener('click', applyAndRun);
 
 tabs?.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-race-script-lap]');
@@ -284,4 +278,5 @@ tabs?.addEventListener('click', (event) => {
 
 loadActions();
 setRuntimeState('programming');
+showEditor(true);
 requestAnimationFrame(runtimeTick);
