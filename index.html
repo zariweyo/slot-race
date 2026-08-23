@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/src/editor-slot-controls.css" />
     <link rel="stylesheet" href="/src/game-controls.css" />
     <link rel="stylesheet" href="/src/race-session.css" />
+    <link rel="stylesheet" href="/src/race-script.css" />
     <title>Photon Circuit · PixiJS</title>
   </head>
   <body>
@@ -51,7 +52,7 @@
           <rect width="1280" height="720" fill="url(#bgGlow)" />
           <rect width="1280" height="720" fill="url(#grid)" opacity=".24" />
           <g class="track-glass-base" transform="matrix(.78 .26 -.52 .36 328 89)" filter="url(#glassShadow)">
-            <rect x="125" y="65" width="1030" height="610" rx="48" ry="48" fill="url(#glassBase)" stroke="#74d9ff" stroke-opacity=".38" stroke-width="2" />
+            <rect x="125" y="65" width="1030" height="610" rx="48" ry="39" fill="url(#glassBase)" stroke="#74d9ff" stroke-opacity=".38" stroke-width="2" />
             <rect x="137" y="77" width="1006" height="586" rx="39" ry="39" fill="none" stroke="#d4f5ff" stroke-opacity=".12" stroke-width="2" />
             <path d="M175 105 H1045 Q1095 105 1110 145 L1070 205 H215 Q175 205 160 170 Z" fill="url(#glassShine)" opacity=".72" />
           </g>
@@ -60,28 +61,30 @@
         <div id="level-stack" class="level-stack"></div>
         <div id="pixi-ui" class="pixi-ui"></div>
 
-        <div class="rail-controls" aria-label="Controles de raíles">
-          <button class="rail-control rail-control-left" data-rail-control="left" type="button" aria-label="Raíl cyan">
-            <svg viewBox="0 0 80 120" aria-hidden="true">
-              <rect class="remote-body" x="22" y="52" width="36" height="50" rx="10" />
-              <circle class="remote-dot" cx="40" cy="84" r="5" />
-              <path class="remote-antenna" d="M40 52 V38" />
-              <path class="remote-wave" d="M28 34 Q40 22 52 34" />
-              <path class="remote-wave" d="M19 27 Q40 5 61 27" opacity=".68" />
-              <path class="remote-wave" d="M10 20 Q40 -10 70 20" opacity=".42" />
-            </svg>
-          </button>
-          <button class="rail-control rail-control-right" data-rail-control="right" type="button" aria-label="Raíl violeta">
-            <svg viewBox="0 0 80 120" aria-hidden="true">
-              <rect class="remote-body" x="22" y="52" width="36" height="50" rx="10" />
-              <circle class="remote-dot" cx="40" cy="84" r="5" />
-              <path class="remote-antenna" d="M40 52 V38" />
-              <path class="remote-wave" d="M28 34 Q40 22 52 34" />
-              <path class="remote-wave" d="M19 27 Q40 5 61 27" opacity=".68" />
-              <path class="remote-wave" d="M10 20 Q40 -10 70 20" opacity=".42" />
-            </svg>
-          </button>
-        </div>
+        <section id="race-script" class="race-script" aria-label="Race Script">
+          <header class="race-script-header">
+            <div>
+              <span class="race-script-kicker">RACE SCRIPT</span>
+              <strong id="race-script-status">PROGRAMMING</strong>
+            </div>
+            <div class="race-script-lap-readout"><span id="race-script-lap">LAP 1</span><span id="race-script-time">00.000</span></div>
+          </header>
+          <div class="race-script-tabs" id="race-script-tabs">
+            <button type="button" data-race-script-lap="all" class="active">TODAS</button>
+            <button type="button" data-race-script-lap="1">V1</button>
+            <button type="button" data-race-script-lap="2">V2</button>
+            <button type="button" data-race-script-lap="3">V3</button>
+            <button type="button" data-race-script-lap="4">V4</button>
+          </div>
+          <div id="race-script-list" class="race-script-list"></div>
+          <button id="race-script-add" class="race-script-add" type="button">+ ACCIÓN</button>
+          <div id="race-script-next" class="race-script-next">NEXT —</div>
+          <footer class="race-script-actions">
+            <button id="race-script-run" type="button" class="primary">▶ RUN</button>
+            <button id="race-script-pause" type="button">⏸ PAUSE</button>
+            <button id="race-script-restart" type="button">↻ RESTART</button>
+          </footer>
+        </section>
 
         <button id="track-editor-open" class="track-editor-open" type="button">EDITOR DE PISTA</button>
         <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
@@ -156,6 +159,7 @@
     <script type="module" src="/src/game-controls.ts"></script>
     <script type="module" src="/src/racing-line-feedback.ts"></script>
     <script type="module" src="/src/race-session.ts"></script>
+    <script type="module" src="/src/race-script.ts"></script>
     <script type="module" src="/src/pixi-main.ts"></script>
   </body>
 </html>
