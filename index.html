@@ -16,38 +16,13 @@
       <div id="game-viewport" class="game-viewport">
         <svg id="background-svg" class="background-svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           <defs>
-            <radialGradient id="bgGlow" cx="50%" cy="48%" r="70%">
-              <stop offset="0" stop-color="#102842" />
-              <stop offset="0.52" stop-color="#07111f" />
-              <stop offset="1" stop-color="#010207" />
-            </radialGradient>
-            <linearGradient id="glassBase" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#2b8ed8" stop-opacity=".58" />
-              <stop offset=".48" stop-color="#1767a7" stop-opacity=".48" />
-              <stop offset="1" stop-color="#0b3f72" stop-opacity=".42" />
-            </linearGradient>
-            <linearGradient id="glassShine" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#d9f6ff" stop-opacity=".22" />
-              <stop offset=".34" stop-color="#8bdcff" stop-opacity=".08" />
-              <stop offset="1" stop-color="#ffffff" stop-opacity="0" />
-            </linearGradient>
-            <filter id="glassShadow" x="-20%" y="-30%" width="140%" height="160%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur" />
-              <feOffset dy="8" result="offset" />
-              <feColorMatrix in="offset" type="matrix" values="0 0 0 0 0.02  0 0 0 0 0.20  0 0 0 0 0.36  0 0 0 .55 0" />
-              <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-            <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%">
-              <feGaussianBlur stdDeviation="7" result="blur" />
-              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-            <filter id="magentaGlow" x="-80%" y="-80%" width="260%" height="260%">
-              <feGaussianBlur stdDeviation="7" result="blur" />
-              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-            <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
-              <path d="M48 0 L0 0 0 48" fill="none" stroke="#17304b" stroke-width="1" opacity=".22" />
-            </pattern>
+            <radialGradient id="bgGlow" cx="50%" cy="48%" r="70%"><stop offset="0" stop-color="#102842" /><stop offset="0.52" stop-color="#07111f" /><stop offset="1" stop-color="#010207" /></radialGradient>
+            <linearGradient id="glassBase" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b8ed8" stop-opacity=".58" /><stop offset=".48" stop-color="#1767a7" stop-opacity=".48" /><stop offset="1" stop-color="#0b3f72" stop-opacity=".42" /></linearGradient>
+            <linearGradient id="glassShine" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9f6ff" stop-opacity=".22" /><stop offset=".34" stop-color="#8bdcff" stop-opacity=".08" /><stop offset="1" stop-color="#ffffff" stop-opacity="0" /></linearGradient>
+            <filter id="glassShadow" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur" /><feOffset dy="8" result="offset" /><feColorMatrix in="offset" type="matrix" values="0 0 0 0 0.02  0 0 0 0 0.20  0 0 0 0 0.36  0 0 0 .55 0" /><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="cyanGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7" result="blur" /><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="magentaGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="7" result="blur" /><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0 L0 0 0 48" fill="none" stroke="#17304b" stroke-width="1" opacity=".22" /></pattern>
           </defs>
           <rect width="1280" height="720" fill="url(#bgGlow)" />
           <rect width="1280" height="720" fill="url(#grid)" opacity=".24" />
@@ -61,14 +36,26 @@
         <div id="level-stack" class="level-stack"></div>
         <div id="pixi-ui" class="pixi-ui"></div>
 
-        <section id="race-script" class="race-script" aria-label="Race Script">
+        <button id="race-script-open" class="race-script-open" type="button">RACE SCRIPT</button>
+        <button id="track-editor-open" class="track-editor-open" type="button">EDITOR DE PISTA</button>
+        <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
+      </div>
+
+      <div id="race-script-modal" class="race-script-modal open" aria-hidden="false">
+        <section id="race-script" class="race-script-panel" role="dialog" aria-modal="true" aria-labelledby="race-script-title">
           <header class="race-script-header">
             <div>
-              <span class="race-script-kicker">RACE SCRIPT</span>
-              <strong id="race-script-status">PROGRAMMING</strong>
+              <div class="race-script-kicker">PHOTON CIRCUIT</div>
+              <h2 id="race-script-title">Race Script</h2>
+              <p>Programa cuándo cambia el coche de rail.</p>
             </div>
-            <div class="race-script-lap-readout"><span id="race-script-lap">LAP 1</span><span id="race-script-time">00.000</span></div>
+            <div class="race-script-telemetry">
+              <span id="race-script-status">PROGRAMMING</span>
+              <span id="race-script-lap">LAP 1</span>
+              <span id="race-script-time">00.000</span>
+            </div>
           </header>
+
           <div class="race-script-tabs" id="race-script-tabs">
             <button type="button" data-race-script-lap="all" class="active">TODAS</button>
             <button type="button" data-race-script-lap="1">V1</button>
@@ -76,78 +63,28 @@
             <button type="button" data-race-script-lap="3">V3</button>
             <button type="button" data-race-script-lap="4">V4</button>
           </div>
+
+          <div class="race-script-columns"><span>TIEMPO</span><span>ACCIÓN</span><span>ÁMBITO</span><span></span></div>
           <div id="race-script-list" class="race-script-list"></div>
-          <button id="race-script-add" class="race-script-add" type="button">+ ACCIÓN</button>
+          <button id="race-script-add" class="race-script-add" type="button">+ AÑADIR ACCIÓN</button>
           <div id="race-script-next" class="race-script-next">NEXT —</div>
-          <footer class="race-script-actions">
-            <button id="race-script-run" type="button" class="primary">▶ RUN</button>
-            <button id="race-script-pause" type="button">⏸ PAUSE</button>
-            <button id="race-script-restart" type="button">↻ RESTART</button>
+
+          <footer class="race-script-footer">
+            <span>Los cambios ya pasados en la vuelta actual no se ejecutan al reanudar.</span>
+            <button id="race-script-apply" class="primary" type="button">APLICAR Y CORRER</button>
           </footer>
         </section>
-
-        <button id="track-editor-open" class="track-editor-open" type="button">EDITOR DE PISTA</button>
-        <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
       </div>
 
       <div id="track-editor-modal" class="track-editor-modal" aria-hidden="true">
         <section class="track-editor-panel" role="dialog" aria-modal="true" aria-labelledby="track-editor-title">
-          <header class="track-editor-header">
-            <div>
-              <div class="track-editor-kicker">PHOTON CIRCUIT</div>
-              <h2 id="track-editor-title">Editor de pista</h2>
-            </div>
-            <button id="track-editor-close" class="track-editor-close" type="button" aria-label="Cerrar">×</button>
-          </header>
-
-          <div class="track-editor-meta">
-            <label>Nombre<input id="track-editor-name" type="text" /></label>
-            <label>ID<input id="track-editor-id" type="text" /></label>
-            <label class="track-editor-speed">Velocidad ×<input id="track-editor-speed" type="number" min="0.1" step="0.1" /></label>
-          </div>
-
+          <header class="track-editor-header"><div><div class="track-editor-kicker">PHOTON CIRCUIT</div><h2 id="track-editor-title">Editor de pista</h2></div><button id="track-editor-close" class="track-editor-close" type="button" aria-label="Cerrar">×</button></header>
+          <div class="track-editor-meta"><label>Nombre<input id="track-editor-name" type="text" /></label><label>ID<input id="track-editor-id" type="text" /></label><label class="track-editor-speed">Velocidad ×<input id="track-editor-speed" type="number" min="0.1" step="0.1" /></label></div>
           <div class="track-editor-workspace">
-            <section class="track-editor-sequence" aria-label="Secuencia de slots">
-              <div class="track-editor-section-head">
-                <div>
-                  <strong>Secuencia</strong>
-                  <span id="track-editor-slot-count"></span>
-                </div>
-                <div class="track-editor-file-actions">
-                  <button id="track-editor-new" type="button">Nuevo</button>
-                  <button id="track-editor-duplicate" type="button">Duplicar</button>
-                </div>
-              </div>
-              <div class="track-editor-columns">
-                <span>#</span><span>Tipo</span><span>Parámetros</span><span></span>
-              </div>
-              <div id="track-editor-list" class="track-editor-list"></div>
-            </section>
-
-            <aside class="track-editor-preview" aria-label="Minimapa del circuito">
-              <div class="track-editor-section-head">
-                <div>
-                  <strong>Minimapa 2D</strong>
-                  <span id="track-editor-map-info">Todas las capas</span>
-                </div>
-                <button id="track-editor-layer" type="button" title="Cambiar capa">CAPAS: TODAS</button>
-              </div>
-              <div class="track-editor-map-frame">
-                <svg id="track-editor-map" viewBox="0 0 420 300" preserveAspectRatio="xMidYMid meet" aria-label="Vista previa 2D del circuito"></svg>
-                <div id="track-editor-map-error" class="track-editor-map-error"></div>
-              </div>
-              <div id="track-editor-levels" class="track-editor-levels"></div>
-            </aside>
+            <section class="track-editor-sequence" aria-label="Secuencia de slots"><div class="track-editor-section-head"><div><strong>Secuencia</strong><span id="track-editor-slot-count"></span></div><div class="track-editor-file-actions"><button id="track-editor-new" type="button">Nuevo</button><button id="track-editor-duplicate" type="button">Duplicar</button></div></div><div class="track-editor-columns"><span>#</span><span>Tipo</span><span>Parámetros</span><span></span></div><div id="track-editor-list" class="track-editor-list"></div></section>
+            <aside class="track-editor-preview" aria-label="Minimapa del circuito"><div class="track-editor-section-head"><div><strong>Minimapa 2D</strong><span id="track-editor-map-info">Todas las capas</span></div><button id="track-editor-layer" type="button" title="Cambiar capa">CAPAS: TODAS</button></div><div class="track-editor-map-frame"><svg id="track-editor-map" viewBox="0 0 420 300" preserveAspectRatio="xMidYMid meet" aria-label="Vista previa 2D del circuito"></svg><div id="track-editor-map-error" class="track-editor-map-error"></div></div><div id="track-editor-levels" class="track-editor-levels"></div></aside>
           </div>
-
-          <footer class="track-editor-footer">
-            <div class="track-editor-load-group">
-              <select id="track-editor-load-select"></select>
-              <button id="track-editor-load" type="button">Cargar</button>
-            </div>
-            <div id="track-editor-status" class="track-editor-status">Circuito actual</div>
-            <button id="track-editor-save" class="primary" type="button">Guardar y aplicar</button>
-          </footer>
+          <footer class="track-editor-footer"><div class="track-editor-load-group"><select id="track-editor-load-select"></select><button id="track-editor-load" type="button">Cargar</button></div><div id="track-editor-status" class="track-editor-status">Circuito actual</div><button id="track-editor-save" class="primary" type="button">Guardar y aplicar</button></footer>
         </section>
       </div>
     </div>
