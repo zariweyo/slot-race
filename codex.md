@@ -162,16 +162,11 @@ Static circuit decoration is generated once and should not materially affect fra
 
 ## Physics
 
-There are currently two local racers:
+There is currently one local racer controlled through Race Script.
 
-- cyan: left lane, controlled by left half of screen (`A` / left arrow on keyboard);
-- violet: right lane, controlled by right half (`D` / right arrow).
+Physics is a custom 1D model along the compiled circuit; no general physics engine is used. Race Script runs the racer automatically; the previous hold-to-accelerate rail controls are no longer the intended primary interaction.
 
-Multitouch is supported.
-
-Physics is a custom 1D model along the compiled circuit; no general physics engine is used. Releasing control applies strong drag (`coastDrag` currently 520).
-
-Crucially, `player.speed` now means **real linear speed along that player's own rail**, not speed along the centreline. Lane curvature changes how much centreline parameter distance must advance:
+Crucially, `player.speed` / current speed means **real linear speed along that player's own rail**, not speed along the centreline. Lane curvature changes how much centreline parameter distance must advance:
 
 ```ts
 laneScale = 1 - curvature * laneOffset;
@@ -180,17 +175,47 @@ centerAdvance = (player.speed / laneScale) * speedMultiplier * dt;
 
 This means an inside rail genuinely has less distance to travel around a curve and its racer can move ahead at equal linear speed. Do not revert to simply incrementing both racers by the same centreline distance.
 
+## Race Script
+
+Race Script is the current experimental control model. Instead of manually changing rail while driving, the player programs timed rail-change actions and runs the simulation.
+
+Each action contains:
+
+```ts
+{
+  timeMs: number,
+  rail: 'cyan' | 'violet',
+  lap: 'all' | number
+}
+```
+
+The editor is visible before the race and remains visible during the run. The main flow is:
+
+```text
+program → run → observe → pause → edit → resume/restart
+```
+
+Rules:
+
+- `all` actions form the base script for every lap.
+- A lap-specific action at the same timestamp overrides the global action at that timestamp.
+- Actions execute against elapsed time within the current lap.
+- Pausing freezes simulation time and allows editing.
+- Resuming continues from the same position/time; actions whose timestamps already passed are not replayed.
+- Restart returns to lap 1, time 0 and the initial rail, preserving the programmed script.
+- Race Script auto-accelerates while running; rail change remains the existing smooth lane transition rather than a teleport.
+- The UI shows current lap time and the next pending action.
+
+Current files:
+
+- `src/race-script.ts`: programmer state, action editing, lap/global merging and runtime telemetry.
+- `src/race-script.css`: compact floating programmer UI.
+
 ## Lap timing and HUD
 
-The HUD shows per-player race telemetry at the top corners, coloured to match each racer:
+The HUD shows race telemetry including laps, last lap and best lap.
 
-- laps;
-- last lap;
-- best lap.
-
-Cyan is top-left, violet top-right. Track name and FPS remain centered. The track-editor button is intentionally small/discreet.
-
-Because racers start offset from the start line, the first crossing only arms lap timing. It is not counted as a completed lap. Subsequent complete crossings update laps, last lap and best lap.
+Because racers start offset from the start line, lap timing should remain coherent with the Race Script lap clock. Script timestamps always reset at a new lap.
 
 ## Track editor
 
@@ -214,8 +239,10 @@ Clients reconstruct x/y/orientation/elevation/depth from the same compiled track
 
 ## Current files of interest
 
-- `index.html`: definitive game entrypoint.
-- `src/pixi-main.ts`: cache, track rendering integration, two-player simulation, cube rendering, depth sorting, HUD and physics.
+- `index.html`: definitive game entrypoint and Race Script container.
+- `src/pixi-main.ts`: cache, track rendering integration, racer simulation, cube rendering, depth sorting, HUD and physics.
+- `src/race-script.ts`: Race Script editor/programmer.
+- `src/race-script.css`: Race Script presentation.
 - `src/game/track/TrackCompiler.ts`: version-2 compiler, ramps, levels and crossing classification.
 - `src/game/track/TrackEditor.ts`: in-game circuit editor.
 - `src/game/track/TrackStorage.ts`: IndexedDB persistence/load logic.
@@ -239,15 +266,18 @@ Clients reconstruct x/y/orientation/elevation/depth from the same compiled track
 8. Do not include elevation in horizontal cube depth sorting; DOM level ordering already handles vertical depth.
 9. Do not calculate cube yaw from screen-space tangent; use world-space tangent.
 10. Cubes and track must share the same projection coefficients.
-11. `speed` is rail-linear speed; preserve curvature/lane-length correction.
+11. Speed is rail-linear speed; preserve curvature/lane-length correction.
 12. Closed circuits must return to their starting logical level.
+13. Race Script timing is lap-relative, not total-race-relative.
+14. Resume must not replay Race Script actions whose timestamps have already passed.
 
 ## Immediate test focus
 
 - Keep stable ~60 FPS with 3D cubes, trails and multiple levels.
 - Verify yaw alignment on curves and pitch direction on ramps.
 - Verify top cube face remains visible at all headings.
-- Verify horizontal cube depth swaps correctly when cyan/violet pass in front of/behind each other.
+- Verify horizontal cube depth swaps correctly when racers pass in front of/behind each other.
 - Verify inside/outside rail length produces the expected positional advantage through curves.
 - Verify `speedMultiplier` gives long tracks the desired perceived pace.
 - Verify different-level intersections render as natural overpasses and same-level intersections remain crossings.
+- Verify Race Script pause/resume/restart semantics and lap-specific overrides.
