@@ -8,11 +8,15 @@ export type RaceScriptAction = {
   lap: RaceScriptLap;
 };
 
-export type RaceScriptCommand = 'run' | 'pause' | 'restart';
-
+const STORAGE_KEY = 'slot-race:race-script:v1';
 const actions: RaceScriptAction[] = [];
 let selectedLap: RaceScriptLap = 'all';
 let runtimeState: 'programming' | 'running' | 'paused' = 'programming';
+let hasStarted = false;
+let currentLap = 1;
+let lapStartedAt = 0;
+let currentRail: RaceScriptRail = 'cyan';
+let executed = new Set<string>();
 
 const root = document.querySelector<HTMLElement>('#race-script');
 const list = document.querySelector<HTMLDivElement>('#race-script-list');
@@ -42,8 +46,34 @@ function parseSeconds(value: string): number {
   return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric * 1000)) : 0;
 }
 
-function dispatchCommand(command: RaceScriptCommand): void {
-  window.dispatchEvent(new CustomEvent<RaceScriptCommand>('race-script-command', { detail: command }));
+function saveActions(): void {
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(actions));
+}
+
+function loadActions(): void {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? '[]') as RaceScriptAction[];
+    if (Array.isArray(saved) && saved.length > 0) {
+      actions.push(...saved.filter((action) => action && typeof action.timeMs === 'number' && (action.rail === 'cyan' || action.rail === 'violet')));
+      return;
+    }
+  } catch {
+    // Ignore malformed prototype state and start with a useful sample.
+  }
+  actions.push(
+    { id: uid(), timeMs: 2000, rail: 'violet', lap: 'all' },
+    { id: uid(), timeMs: 4000, rail: 'cyan', lap: 'all' },
+  );
+  saveActions();
+}
+
+function getActionsForLap(lap: number): RaceScriptAction[] {
+  const globals = actions.filter((action) => action.lap === 'all');
+  const specifics = actions.filter((action) => action.lap === lap);
+  const specificTimes = new Set(specifics.map((action) => action.timeMs));
+  return [...globals.filter((action) => !specificTimes.has(action.timeMs)), ...specifics]
+    .sort((a, b) => a.timeMs - b.timeMs)
+    .map((action) => ({ ...action }));
 }
 
 function visibleActions(): Array<RaceScriptAction & { inherited?: boolean }> {
@@ -52,6 +82,70 @@ function visibleActions(): Array<RaceScriptAction & { inherited?: boolean }> {
     .filter((action) => action.lap === 'all' || action.lap === selectedLap)
     .map((action) => ({ ...action, inherited: action.lap === 'all' }))
     .sort((a, b) => a.timeMs - b.timeMs || Number(a.inherited) - Number(b.inherited));
+}
+
+function setRuntimeState(state: 'programming' | 'running' | 'paused'): void {
+  runtimeState = state;
+  root?.classList.toggle('running', state === 'running');
+  root?.classList.toggle('paused', state === 'paused');
+  if (status) status.textContent = state.toUpperCase();
+  render();
+}
+
+function keyboard(code: 'KeyA' | 'KeyD', type: 'keydown' | 'keyup'): void {
+  window.dispatchEvent(new KeyboardEvent(type, { code, key: code === 'KeyA' ? 'a' : 'd', bubbles: true }));
+}
+
+function releaseRail(): void {
+  keyboard('KeyA', 'keyup');
+  keyboard('KeyD', 'keyup');
+}
+
+function pressRail(rail: RaceScriptRail): void {
+  releaseRail();
+  currentRail = rail;
+  keyboard(rail === 'cyan' ? 'KeyA' : 'KeyD', 'keydown');
+}
+
+function elapsedLapMs(now = performance.now()): number {
+  return hasStarted ? Math.max(0, now - lapStartedAt) : 0;
+}
+
+function markPastActionsAsHandled(now: number): void {
+  const elapsed = elapsedLapMs(now);
+  for (const action of getActionsForLap(currentLap)) {
+    if (action.timeMs <= elapsed) executed.add(`${currentLap}:${action.id}`);
+  }
+}
+
+function startOrResume(): void {
+  if (runtimeState === 'running') return;
+  const resuming = runtimeState === 'paused';
+  if (resuming) window.dispatchEvent(new CustomEvent('photon:resume', { detail: { reason: 'race-script' } }));
+  const now = performance.now();
+  if (!hasStarted) {
+    hasStarted = true;
+    currentLap = 1;
+    lapStartedAt = now;
+    executed = new Set<string>();
+  } else if (resuming) {
+    markPastActionsAsHandled(now);
+  }
+  setRuntimeState('running');
+  pressRail(currentRail);
+}
+
+function pauseRace(): void {
+  if (runtimeState !== 'running') return;
+  releaseRail();
+  setRuntimeState('paused');
+  window.dispatchEvent(new CustomEvent('photon:pause', { detail: { reason: 'race-script' } }));
+}
+
+function restartRace(): void {
+  saveActions();
+  releaseRail();
+  window.location.reload();
 }
 
 function render(): void {
@@ -81,6 +175,7 @@ function render(): void {
     time.setAttribute('aria-label', 'Tiempo en segundos');
     time.addEventListener('change', () => {
       action.timeMs = parseSeconds(time.value);
+      saveActions();
       render();
     });
 
@@ -91,6 +186,7 @@ function render(): void {
     rail.value = action.rail;
     rail.addEventListener('change', () => {
       action.rail = rail.value as RaceScriptRail;
+      saveActions();
       render();
     });
 
@@ -107,6 +203,7 @@ function render(): void {
     remove.addEventListener('click', () => {
       const index = actions.findIndex((entry) => entry.id === action.id);
       if (index >= 0) actions.splice(index, 1);
+      saveActions();
       render();
     });
 
@@ -125,17 +222,56 @@ function render(): void {
 function addAction(): void {
   if (runtimeState === 'running') return;
   const targetLap = selectedLap;
-  const sameScope = actions.filter((action) => action.lap === targetLap);
-  const lastTime = sameScope.reduce((max, action) => Math.max(max, action.timeMs), 0);
-  const lastRail = sameScope.sort((a, b) => a.timeMs - b.timeMs).at(-1)?.rail ?? 'cyan';
+  const sameScope = actions.filter((action) => action.lap === targetLap).sort((a, b) => a.timeMs - b.timeMs);
+  const lastTime = sameScope.at(-1)?.timeMs ?? 0;
+  const lastRail = sameScope.at(-1)?.rail ?? 'cyan';
   actions.push({ id: uid(), timeMs: lastTime + 1000, rail: lastRail === 'cyan' ? 'violet' : 'cyan', lap: targetLap });
+  saveActions();
   render();
 }
 
+function syncLapFromHud(timestamp: number): void {
+  const hudLap = document.querySelector<SVGTextElement>('.race-session-lap');
+  const match = hudLap?.textContent?.match(/VUELTA\s+(\d+)/i);
+  if (!match) return;
+  const lap = Number(match[1]);
+  if (!Number.isFinite(lap) || lap < 1 || lap === currentLap) return;
+  currentLap = lap;
+  lapStartedAt = timestamp;
+}
+
+function runtimeTick(timestamp: number): void {
+  syncLapFromHud(timestamp);
+  const elapsed = elapsedLapMs(timestamp);
+  const script = getActionsForLap(currentLap);
+  let next: RaceScriptAction | null = null;
+
+  if (runtimeState === 'running') {
+    for (const action of script) {
+      const key = `${currentLap}:${action.id}`;
+      if (executed.has(key)) continue;
+      if (action.timeMs <= elapsed) {
+        pressRail(action.rail);
+        executed.add(key);
+        continue;
+      }
+      next = action;
+      break;
+    }
+  } else {
+    next = script.find((action) => !executed.has(`${currentLap}:${action.id}`) && action.timeMs > elapsed) ?? null;
+  }
+
+  if (lapReadout) lapReadout.textContent = `LAP ${currentLap}`;
+  if (timeReadout) timeReadout.textContent = formatActionTime(elapsed);
+  if (nextReadout) nextReadout.textContent = next ? `NEXT  ${formatActionTime(next.timeMs)}  ${next.rail === 'cyan' ? '● CYAN' : '● VIOLET'}` : 'NEXT —';
+  requestAnimationFrame(runtimeTick);
+}
+
 addButton?.addEventListener('click', addAction);
-runButton?.addEventListener('click', () => dispatchCommand('run'));
-pauseButton?.addEventListener('click', () => dispatchCommand('pause'));
-restartButton?.addEventListener('click', () => dispatchCommand('restart'));
+runButton?.addEventListener('click', startOrResume);
+pauseButton?.addEventListener('click', pauseRace);
+restartButton?.addEventListener('click', restartRace);
 
 tabs?.addEventListener('click', (event) => {
   const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-race-script-lap]');
@@ -146,32 +282,6 @@ tabs?.addEventListener('click', (event) => {
   render();
 });
 
-export function getRaceScriptActionsForLap(lap: number): RaceScriptAction[] {
-  const globals = actions.filter((action) => action.lap === 'all');
-  const specifics = actions.filter((action) => action.lap === lap);
-  const specificTimes = new Set(specifics.map((action) => action.timeMs));
-  return [...globals.filter((action) => !specificTimes.has(action.timeMs)), ...specifics]
-    .sort((a, b) => a.timeMs - b.timeMs)
-    .map((action) => ({ ...action }));
-}
-
-export function setRaceScriptRuntime(state: 'programming' | 'running' | 'paused'): void {
-  runtimeState = state;
-  root?.classList.toggle('running', state === 'running');
-  root?.classList.toggle('paused', state === 'paused');
-  if (status) status.textContent = state.toUpperCase();
-  render();
-}
-
-export function updateRaceScriptTelemetry(lap: number, elapsedMs: number, next: RaceScriptAction | null): void {
-  if (lapReadout) lapReadout.textContent = `LAP ${lap}`;
-  if (timeReadout) timeReadout.textContent = formatActionTime(elapsedMs);
-  if (nextReadout) nextReadout.textContent = next ? `NEXT  ${formatActionTime(next.timeMs)}  ${next.rail === 'cyan' ? '● CYAN' : '● VIOLET'}` : 'NEXT —';
-}
-
-// Give the first prototype an immediately testable sequence.
-actions.push(
-  { id: uid(), timeMs: 2000, rail: 'violet', lap: 'all' },
-  { id: uid(), timeMs: 4000, rail: 'cyan', lap: 'all' },
-);
-render();
+loadActions();
+setRuntimeState('programming');
+requestAnimationFrame(runtimeTick);
