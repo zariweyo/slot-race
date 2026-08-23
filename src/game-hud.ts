@@ -1,3 +1,5 @@
+import './game-hud.css';
+
 const viewport = document.querySelector<HTMLElement>('#game-viewport');
 
 if (viewport) {
@@ -54,9 +56,7 @@ if (viewport) {
     lapStartedAt = performance.now();
   };
 
-  if (sessionLap) {
-    new MutationObserver(syncLap).observe(sessionLap, { childList: true, characterData: true, subtree: true });
-  }
+  if (sessionLap) new MutationObserver(syncLap).observe(sessionLap, { childList: true, characterData: true, subtree: true });
 
   const tick = (timestamp: number): void => {
     syncLap();
