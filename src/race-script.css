@@ -1,0 +1,210 @@
+.race-script {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2000;
+  width: min(360px, calc(100% - 36px));
+  max-height: calc(100% - 36px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(123, 221, 255, .35);
+  border-radius: 16px;
+  background: rgba(3, 10, 20, .86);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .42), inset 0 0 24px rgba(39, 231, 255, .04);
+  backdrop-filter: blur(12px);
+  color: #e8f8ff;
+  font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.race-script-header,
+.race-script-actions,
+.race-script-lap-readout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.race-script-header > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.race-script-kicker {
+  color: #27e7ff;
+  letter-spacing: .16em;
+  font-size: 11px;
+}
+
+#race-script-status {
+  font-size: 16px;
+  letter-spacing: .06em;
+}
+
+.race-script.running #race-script-status { color: #72ffb1; }
+.race-script.paused #race-script-status { color: #ffd166; }
+
+.race-script-lap-readout {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: rgba(232, 248, 255, .72);
+}
+
+#race-script-time {
+  color: #fff;
+  font-size: 15px;
+}
+
+.race-script-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.race-script button,
+.race-script input,
+.race-script select {
+  font: inherit;
+}
+
+.race-script button {
+  border: 1px solid rgba(133, 220, 255, .22);
+  background: rgba(14, 37, 58, .72);
+  color: #dff7ff;
+  border-radius: 8px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.race-script button:hover:not(:disabled) {
+  border-color: rgba(39, 231, 255, .68);
+  background: rgba(21, 56, 84, .88);
+}
+
+.race-script button:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+.race-script-tabs button {
+  min-height: 28px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.race-script-tabs button.active {
+  color: #061118;
+  background: #7deaff;
+  border-color: #baf6ff;
+}
+
+.race-script-list {
+  min-height: 78px;
+  max-height: 220px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.race-script-row {
+  display: grid;
+  grid-template-columns: 88px 1fr 48px 28px;
+  gap: 6px;
+  align-items: center;
+}
+
+.race-script-row.inherited {
+  opacity: .48;
+}
+
+.race-script-time-input,
+.race-script-rail {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 32px;
+  border: 1px solid rgba(133, 220, 255, .2);
+  border-radius: 8px;
+  background: rgba(2, 10, 18, .88);
+  color: #f3fbff;
+  padding: 0 8px;
+  outline: none;
+}
+
+.race-script-time-input:focus,
+.race-script-rail:focus {
+  border-color: rgba(39, 231, 255, .75);
+}
+
+.race-script-rail.cyan { color: #27e7ff; }
+.race-script-rail.violet { color: #c486ff; }
+
+.race-script-scope {
+  text-align: center;
+  color: rgba(232, 248, 255, .56);
+  font-size: 10px;
+}
+
+.race-script-remove {
+  min-height: 28px !important;
+  height: 28px;
+  padding: 0;
+  font-size: 18px !important;
+  color: #ff8ba7 !important;
+}
+
+.race-script-empty {
+  display: grid;
+  place-items: center;
+  min-height: 74px;
+  padding: 8px;
+  border: 1px dashed rgba(133, 220, 255, .16);
+  border-radius: 10px;
+  color: rgba(232, 248, 255, .42);
+  text-align: center;
+  font-weight: 500;
+}
+
+.race-script-add {
+  width: 100%;
+  border-style: dashed !important;
+  color: #8cecff !important;
+}
+
+.race-script-next {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(39, 231, 255, .06);
+  color: #9aefff;
+  letter-spacing: .04em;
+}
+
+.race-script-actions {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+}
+
+.race-script-actions .primary {
+  border-color: rgba(114, 255, 177, .5);
+  background: rgba(26, 111, 75, .52);
+  color: #baffd7;
+}
+
+@media (max-width: 760px) {
+  .race-script {
+    right: 8px;
+    bottom: 8px;
+    width: min(330px, calc(100% - 16px));
+    max-height: 58%;
+    padding: 10px;
+    gap: 7px;
+  }
+
+  .race-script-list { max-height: 130px; }
+  .race-script-row { grid-template-columns: 78px 1fr 42px 26px; gap: 4px; }
+  .race-script-actions button { min-height: 30px; font-size: 11px; }
+}
