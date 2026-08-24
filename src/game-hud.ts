@@ -3,29 +3,69 @@ import './game-hud.css';
 const viewport = document.querySelector<HTMLElement>('#game-viewport');
 
 if (viewport) {
-  const hud = document.createElement('div');
-  hud.className = 'game-time-hud';
-  hud.innerHTML = `
-    <div id="game-lap-time" class="game-lap-time">00.000</div>
-    <div id="game-total-time" class="game-total-time">TOTAL 00:00.000</div>
-  `;
-  viewport.appendChild(hud);
+  const sessionHud = document.querySelector<SVGSVGElement>('.race-session-svg');
+  const sessionTotal = document.querySelector<SVGTextElement>('.race-session-total');
+  const sessionLap = document.querySelector<SVGTextElement>('.race-session-lap');
+  const sessionStats = document.querySelector<SVGTextElement>('.race-session-stats');
 
-  const lapTime = hud.querySelector<HTMLElement>('#game-lap-time');
-  const totalTime = hud.querySelector<HTMLElement>('#game-total-time');
-  const raceScriptTime = document.querySelector<HTMLElement>('#race-script-time');
-  const raceSessionTotal = document.querySelector<SVGTextElement>('.race-session-total');
+  if (sessionTotal) {
+    sessionTotal.setAttribute('y', '82');
+    sessionTotal.classList.add('race-session-total-small');
+  }
+  sessionLap?.setAttribute('y', '108');
+  sessionStats?.setAttribute('y', '131');
 
-  const sync = (): void => {
-    if (lapTime && raceScriptTime?.textContent) lapTime.textContent = raceScriptTime.textContent;
-    if (totalTime && raceSessionTotal?.textContent) totalTime.textContent = `TOTAL ${raceSessionTotal.textContent}`;
+  const control = document.createElement('button');
+  control.type = 'button';
+  control.className = 'race-hud-control';
+  control.setAttribute('aria-label', 'Abrir Race Script');
+  control.innerHTML = '<span id="game-lap-time" class="game-lap-time">00.000</span>';
+  viewport.appendChild(control);
+
+  const lapTime = control.querySelector<HTMLElement>('#game-lap-time');
+
+  let started = false;
+  let lapStartedAt = 0;
+  let currentLap = 1;
+
+  const formatLap = (ms: number): string => {
+    const value = Math.max(0, Math.floor(ms));
+    const seconds = Math.floor(value / 1000);
+    const millis = value % 1000;
+    return `${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
   };
 
-  if (raceScriptTime) new MutationObserver(sync).observe(raceScriptTime, { childList: true, characterData: true, subtree: true });
-  if (raceSessionTotal) {
-    raceSessionTotal.classList.add('race-session-total-hidden');
-    new MutationObserver(sync).observe(raceSessionTotal, { childList: true, characterData: true, subtree: true });
-  }
+  const startIfNeeded = (): void => {
+    if (started) return;
+    started = true;
+    lapStartedAt = performance.now();
+  };
 
-  sync();
+  window.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyA' || event.code === 'ArrowLeft' || event.code === 'KeyD' || event.code === 'ArrowRight') startIfNeeded();
+  });
+
+  const syncLap = (): void => {
+    const match = sessionLap?.textContent?.match(/VUELTA\s+(\d+)/i);
+    if (!match) return;
+    const lap = Number(match[1]);
+    if (!Number.isFinite(lap) || lap < 1 || lap === currentLap) return;
+    currentLap = lap;
+    lapStartedAt = performance.now();
+  };
+
+  if (sessionLap) new MutationObserver(syncLap).observe(sessionLap, { childList: true, characterData: true, subtree: true });
+
+  control.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('race-script:open'));
+  });
+
+  const tick = (timestamp: number): void => {
+    syncLap();
+    if (started && lapTime) lapTime.textContent = formatLap(timestamp - lapStartedAt);
+    requestAnimationFrame(tick);
+  };
+
+  if (sessionHud) sessionHud.classList.add('race-session-hud-integrated');
+  requestAnimationFrame(tick);
 }
