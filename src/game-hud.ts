@@ -7,6 +7,7 @@ if (viewport) {
   const sessionTotal = document.querySelector<SVGTextElement>('.race-session-total');
   const sessionLap = document.querySelector<SVGTextElement>('.race-session-lap');
   const sessionStats = document.querySelector<SVGTextElement>('.race-session-stats');
+  const raceScriptOpen = document.querySelector<HTMLButtonElement>('#race-script-open');
 
   if (sessionTotal) {
     sessionTotal.setAttribute('y', '82');
@@ -56,9 +57,7 @@ if (viewport) {
 
   if (sessionLap) new MutationObserver(syncLap).observe(sessionLap, { childList: true, characterData: true, subtree: true });
 
-  control.addEventListener('click', () => {
-    window.dispatchEvent(new CustomEvent('race-script:open'));
-  });
+  control.addEventListener('click', () => raceScriptOpen?.click());
 
   const tick = (timestamp: number): void => {
     syncLap();
