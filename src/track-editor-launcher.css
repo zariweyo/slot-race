@@ -1,0 +1,35 @@
+.track-editor-open {
+  position: absolute !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: 12px !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  z-index: 1500 !important;
+  min-height: 34px;
+  padding: 7px 14px !important;
+  border: 1px solid rgba(124, 238, 255, .42) !important;
+  border-radius: 8px !important;
+  background: rgba(4, 12, 24, .82) !important;
+  color: #d9f9ff !important;
+  font: 700 10px ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  letter-spacing: .08em !important;
+  opacity: .88 !important;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(58, 218, 255, .12) !important;
+}
+
+.track-editor-open:hover,
+.track-editor-open:focus-visible {
+  opacity: 1 !important;
+  border-color: rgba(124, 238, 255, .78) !important;
+}
+
+@media (max-width: 760px) {
+  .track-editor-open {
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    min-height: 32px;
+    padding: 6px 11px !important;
+    font-size: 9px !important;
+  }
+}
