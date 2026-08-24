@@ -1,31 +1,54 @@
-.race-session-total-hidden {
-  opacity: 0 !important;
-}
-
-.game-time-hud {
+.race-hud-control {
   position: absolute;
-  top: 24px;
+  top: 18px;
   left: 50%;
   z-index: 1500;
+  width: 440px;
+  height: 136px;
   transform: translateX(-50%);
-  display: grid;
-  justify-items: center;
-  gap: 7px;
-  pointer-events: none;
-  user-select: none;
-  text-align: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.race-hud-control::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
 }
 
 .game-lap-time {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
   color: #f7feff;
-  font: 900 clamp(34px, 4vw, 54px)/1 Arial Black, Arial, sans-serif;
+  font: 900 46px/1 Arial Black, Arial, sans-serif;
   letter-spacing: .05em;
   text-shadow: 0 0 8px rgba(55, 228, 255, .72), 0 0 20px rgba(55, 228, 255, .28), 0 2px 2px rgba(0, 0, 0, .85);
+  pointer-events: none;
 }
 
-.game-total-time {
-  color: rgba(142, 240, 255, .82);
-  font: 800 clamp(10px, 1.05vw, 14px)/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: .14em;
-  text-shadow: 0 0 6px rgba(39, 231, 255, .3);
+.race-session-total-small {
+  font-size: 17px !important;
+  letter-spacing: 2px !important;
+  fill: #8defff !important;
+  filter: drop-shadow(0 0 4px rgba(55, 228, 255, .3)) !important;
+}
+
+@media (max-width: 760px) {
+  .race-hud-control {
+    top: 8px;
+    width: min(440px, 80vw);
+    height: 112px;
+  }
+
+  .game-lap-time {
+    font-size: clamp(32px, 8vw, 46px);
+  }
 }
