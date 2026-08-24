@@ -34,12 +34,7 @@
   pointer-events: none;
 }
 
-.race-session-total-small {
-  font-size: 17px !important;
-  letter-spacing: 2px !important;
-  fill: #8defff !important;
-  filter: drop-shadow(0 0 4px rgba(55, 228, 255, .3)) !important;
-}
+.race-session-total-hidden { display: none; }
 
 @media (max-width: 760px) {
   .race-hud-control {

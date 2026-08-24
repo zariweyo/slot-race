@@ -3,18 +3,7 @@ import './game-hud.css';
 const viewport = document.querySelector<HTMLElement>('#game-viewport');
 
 if (viewport) {
-  const sessionHud = document.querySelector<SVGSVGElement>('.race-session-svg');
-  const sessionTotal = document.querySelector<SVGTextElement>('.race-session-total');
-  const sessionLap = document.querySelector<SVGTextElement>('.race-session-lap');
-  const sessionStats = document.querySelector<SVGTextElement>('.race-session-stats');
   const raceScriptOpen = document.querySelector<HTMLButtonElement>('#race-script-open');
-
-  if (sessionTotal) {
-    sessionTotal.setAttribute('y', '82');
-    sessionTotal.classList.add('race-session-total-small');
-  }
-  sessionLap?.setAttribute('y', '108');
-  sessionStats?.setAttribute('y', '131');
 
   const control = document.createElement('button');
   control.type = 'button';
@@ -28,6 +17,8 @@ if (viewport) {
   let started = false;
   let lapStartedAt = 0;
   let currentLap = 1;
+  let sessionLap: SVGTextElement | null = null;
+  let lapObserver: MutationObserver | null = null;
 
   const formatLap = (ms: number): string => {
     const value = Math.max(0, Math.floor(ms));
@@ -42,10 +33,6 @@ if (viewport) {
     lapStartedAt = performance.now();
   };
 
-  window.addEventListener('keydown', (event) => {
-    if (event.code === 'KeyA' || event.code === 'ArrowLeft' || event.code === 'KeyD' || event.code === 'ArrowRight') startIfNeeded();
-  });
-
   const syncLap = (): void => {
     const match = sessionLap?.textContent?.match(/VUELTA\s+(\d+)/i);
     if (!match) return;
@@ -55,7 +42,29 @@ if (viewport) {
     lapStartedAt = performance.now();
   };
 
-  if (sessionLap) new MutationObserver(syncLap).observe(sessionLap, { childList: true, characterData: true, subtree: true });
+  const integrateSessionHud = (): void => {
+    const nextLap = document.querySelector<SVGTextElement>('.race-session-lap');
+    const sessionHud = document.querySelector<SVGSVGElement>('.race-session-svg');
+    const sessionTotal = document.querySelector<SVGTextElement>('.race-session-total');
+    const sessionStats = document.querySelector<SVGTextElement>('.race-session-stats');
+
+    sessionHud?.classList.add('race-session-hud-integrated');
+    sessionTotal?.classList.add('race-session-total-hidden');
+    nextLap?.setAttribute('y', '92');
+    sessionStats?.setAttribute('y', '116');
+
+    if (nextLap && nextLap !== sessionLap) {
+      lapObserver?.disconnect();
+      sessionLap = nextLap;
+      lapObserver = new MutationObserver(syncLap);
+      lapObserver.observe(sessionLap, { childList: true, characterData: true, subtree: true });
+      syncLap();
+    }
+  };
+
+  window.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyA' || event.code === 'ArrowLeft' || event.code === 'KeyD' || event.code === 'ArrowRight') startIfNeeded();
+  });
 
   control.addEventListener('click', () => raceScriptOpen?.click());
 
@@ -65,6 +74,7 @@ if (viewport) {
     requestAnimationFrame(tick);
   };
 
-  if (sessionHud) sessionHud.classList.add('race-session-hud-integrated');
+  new MutationObserver(integrateSessionHud).observe(viewport, { childList: true, subtree: true });
+  integrateSessionHud();
   requestAnimationFrame(tick);
 }
