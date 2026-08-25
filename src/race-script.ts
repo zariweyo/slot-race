@@ -227,7 +227,7 @@ function addAction(): void {
 
 function syncLapFromHud(timestamp: number): void {
   const hudLap = document.querySelector<SVGTextElement>('.race-session-lap');
-  const match = hudLap?.textContent?.match(/VUELTA\s+(\d+)/i);
+  const match = hudLap?.textContent?.match(/(?:VUELTA\s+)?(\d+)\s*(?:\/|$)/i);
   if (!match) return;
   const lap = Number(match[1]);
   if (!Number.isFinite(lap) || lap < 1 || lap === currentLap) return;
@@ -278,5 +278,4 @@ tabs?.addEventListener('click', (event) => {
 
 loadActions();
 setRuntimeState('programming');
-showEditor(true);
 requestAnimationFrame(runtimeTick);

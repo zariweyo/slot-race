@@ -5,6 +5,7 @@ const DB_VERSION = 1;
 const STORE = 'tracks';
 const ACTIVE_KEY = 'slot-race.active-track';
 const SETTINGS_PREFIX = 'slot-race.track-settings.';
+const RAIL_EDGE_MARGIN_RATIO = 0.70;
 
 type StoredTrack = TrackDefinition & { updatedAt: number };
 type TrackSettings = { laps?: number; laneSpacing?: number };
@@ -39,14 +40,15 @@ function settingsFor(id: string): TrackSettings | null {
 
 function applySettings(definition: TrackDefinition): TrackDefinition {
   const settings = settingsFor(definition.id);
-  if (!settings) return definition;
-  const laps = Number.isFinite(settings.laps) ? Math.max(1, Math.round(settings.laps!)) : definition.laps;
-  const laneSpacing = Number.isFinite(settings.laneSpacing) ? Math.max(10, Number(settings.laneSpacing)) : definition.road.laneSpacing;
+  const laps = settings && Number.isFinite(settings.laps) ? Math.max(1, Math.round(settings.laps!)) : definition.laps;
+  const laneSpacing = settings && Number.isFinite(settings.laneSpacing) ? Math.max(10, Number(settings.laneSpacing)) : definition.road.laneSpacing;
+  const railMargin = laneSpacing * RAIL_EDGE_MARGIN_RATIO;
   return {
     ...definition,
     laps,
     road: {
       ...definition.road,
+      width: laneSpacing + railMargin * 2,
       laneSpacing,
     },
   };

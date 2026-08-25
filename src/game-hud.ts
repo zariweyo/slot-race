@@ -9,10 +9,13 @@ if (viewport) {
   control.type = 'button';
   control.className = 'race-hud-control';
   control.setAttribute('aria-label', 'Abrir Race Script');
-  control.innerHTML = '<span id="game-lap-time" class="game-lap-time">00.000</span>';
+  control.innerHTML = '<span id="game-fps" class="game-fps">FPS --</span><span id="game-lap-count" class="game-lap-count">1/3</span><span id="game-lap-time" class="game-lap-time">00.000</span><span id="game-best-time" class="game-best-time">Best: --:--.---</span><span id="game-total-time" class="game-total-time">TOTAL 00:00.000</span>';
   viewport.appendChild(control);
 
   const lapTime = control.querySelector<HTMLElement>('#game-lap-time');
+  const totalTime = control.querySelector<HTMLElement>('#game-total-time');
+  const bestTime = control.querySelector<HTMLElement>('#game-best-time');
+  const lapCount = control.querySelector<HTMLElement>('#game-lap-count');
 
   let started = false;
   let lapStartedAt = 0;
@@ -34,7 +37,7 @@ if (viewport) {
   };
 
   const syncLap = (): void => {
-    const match = sessionLap?.textContent?.match(/VUELTA\s+(\d+)/i);
+    const match = sessionLap?.textContent?.match(/(?:VUELTA\s+)?(\d+)\s*(?:\/|$)/i);
     if (!match) return;
     const lap = Number(match[1]);
     if (!Number.isFinite(lap) || lap < 1 || lap === currentLap) return;
@@ -50,8 +53,10 @@ if (viewport) {
 
     sessionHud?.classList.add('race-session-hud-integrated');
     sessionTotal?.classList.add('race-session-total-hidden');
-    nextLap?.setAttribute('y', '92');
-    sessionStats?.setAttribute('y', '116');
+    nextLap?.setAttribute('x', '762');
+    nextLap?.setAttribute('y', '31');
+    sessionStats?.setAttribute('x', '640');
+    sessionStats?.setAttribute('y', '77');
 
     if (nextLap && nextLap !== sessionLap) {
       lapObserver?.disconnect();
@@ -71,6 +76,12 @@ if (viewport) {
   const tick = (timestamp: number): void => {
     syncLap();
     if (started && lapTime) lapTime.textContent = formatLap(timestamp - lapStartedAt);
+    const sessionTotal = document.querySelector<SVGTextElement>('.race-session-total');
+    const sessionStats = document.querySelector<SVGTextElement>('.race-session-stats');
+    if (totalTime && sessionTotal) totalTime.textContent = `TOTAL ${sessionTotal.textContent ?? '00:00.000'}`;
+    const best = sessionStats?.textContent?.match(/BEST\s+(\S+)/i)?.[1] ?? '--:--.---';
+    if (bestTime) bestTime.textContent = `Best: ${best}`;
+    if (lapCount && sessionLap?.textContent) lapCount.textContent = sessionLap.textContent;
     requestAnimationFrame(tick);
   };
 

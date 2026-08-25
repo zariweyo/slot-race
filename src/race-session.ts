@@ -24,10 +24,11 @@ const formatTime = (ms: number): string => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
 };
 const formatOptionalTime = (ms: number | null): string => ms === null ? '--:--.---' : formatTime(ms);
+const formatLapCounter = (current: number, total: number): string => `${current}/${total}`;
 
 const svg = <K extends keyof SVGElementTagNameMap>(tag: K): SVGElementTagNameMap[K] => document.createElementNS('http://www.w3.org/2000/svg', tag);
 
-const createHud = (laps: number): { root: SVGSVGElement; total: SVGTextElement; lap: SVGTextElement; stats: SVGTextElement } | null => {
+const createHud = (laps: number): { root: SVGSVGElement; total: SVGTextElement; lap: SVGTextElement; stats: SVGTextElement; startButton: HTMLButtonElement } | null => {
   const viewport = document.querySelector<HTMLElement>('#game-viewport');
   if (!viewport) return null;
   const root = svg('svg');
@@ -36,40 +37,39 @@ const createHud = (laps: number): { root: SVGSVGElement; total: SVGTextElement; 
   root.setAttribute('aria-hidden', 'true');
 
   const plate = svg('path');
-  plate.setAttribute('d', 'M430 12 H850 Q871 12 877 34 L865 135 Q862 151 842 151 H438 Q418 151 415 135 L403 34 Q409 12 430 12 Z');
+  plate.setAttribute('d', 'M505 14 H775 Q792 14 798 31 L791 88 Q788 101 773 101 H507 Q492 101 489 88 L482 31 Q488 14 505 14 Z');
   plate.setAttribute('class', 'race-session-hud-plate');
   root.appendChild(plate);
 
   const total = svg('text');
   total.setAttribute('x', '640');
-  total.setAttribute('y', '54');
+  total.setAttribute('y', '43');
   total.setAttribute('class', 'race-session-total');
   total.textContent = '00:00.000';
   root.appendChild(total);
 
   const lap = svg('text');
-  lap.setAttribute('x', '640');
-  lap.setAttribute('y', '91');
+  lap.setAttribute('x', '762');
+  lap.setAttribute('y', '31');
   lap.setAttribute('class', 'race-session-lap');
-  lap.textContent = `VUELTA 1 / ${laps}`;
+  lap.textContent = formatLapCounter(1, laps);
   root.appendChild(lap);
 
   const stats = svg('text');
   stats.setAttribute('x', '640');
-  stats.setAttribute('y', '116');
+  stats.setAttribute('y', '77');
   stats.setAttribute('class', 'race-session-stats');
-  stats.textContent = 'ÚLT --:--.---   ·   BEST --:--.---';
+  stats.textContent = 'ULT --:--.---   BEST --:--.---';
   root.appendChild(stats);
 
-  const hint = svg('text');
-  hint.setAttribute('x', '640');
-  hint.setAttribute('y', '139');
-  hint.setAttribute('class', 'race-session-hint');
-  hint.textContent = 'PULSA UN CONTROL PARA EMPEZAR';
-  root.appendChild(hint);
+  const startButton = document.createElement('button');
+  startButton.type = 'button';
+  startButton.className = 'race-start-button';
+  startButton.textContent = 'INICIAR';
 
   viewport.appendChild(root);
-  return { root, total, lap, stats };
+  viewport.appendChild(startButton);
+  return { root, total, lap, stats, startButton };
 };
 
 const showResults = (totalMs: number, bestLapMs: number | null, laps: number): void => {
@@ -234,7 +234,13 @@ void (async () => {
     raceStartedAt = timestamp;
     lapStartedAt = timestamp;
     hud.root.classList.add('started');
+    hud.startButton.hidden = true;
   };
+
+  hud.startButton.addEventListener('click', () => {
+    document.querySelector<HTMLButtonElement>('#race-script-apply')?.click();
+    if (!started) window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a', bubbles: true }));
+  });
 
   window.addEventListener('keydown', (event) => {
     if (finished) return;
@@ -254,7 +260,7 @@ void (async () => {
   window.addEventListener('blur', () => pressed.clear());
 
   const updateStats = (): void => {
-    hud.stats.textContent = `ÚLT ${formatOptionalTime(lastLapMs)}   ·   BEST ${formatOptionalTime(bestLapMs)}`;
+    hud.stats.textContent = `ULT ${formatOptionalTime(lastLapMs)}   BEST ${formatOptionalTime(bestLapMs)}`;
   };
 
   const tick = (timestamp: number): void => {
@@ -288,7 +294,7 @@ void (async () => {
             finished = true;
             const totalMs = timestamp - raceStartedAt;
             hud.total.textContent = formatTime(totalMs);
-            hud.lap.textContent = `FINAL · ${targetLaps} / ${targetLaps}`;
+            hud.lap.textContent = formatLapCounter(targetLaps, targetLaps);
             showResults(totalMs, bestLapMs, targetLaps);
             window.dispatchEvent(new CustomEvent('photon:pause', { detail: { reason: 'race-finished' } }));
             return;
@@ -296,7 +302,7 @@ void (async () => {
         }
 
         hud.total.textContent = formatTime(timestamp - raceStartedAt);
-        hud.lap.textContent = `VUELTA ${Math.min(targetLaps, completedLaps + 1)} / ${targetLaps}`;
+        hud.lap.textContent = formatLapCounter(Math.min(targetLaps, completedLaps + 1), targetLaps);
       }
     }
 

@@ -1,49 +1,176 @@
 .race-hud-control {
   position: absolute;
-  top: 18px;
-  left: 50%;
+  top: 14px;
+  right: max(14px, env(safe-area-inset-right));
   z-index: 1500;
-  width: 440px;
-  height: 136px;
-  transform: translateX(-50%);
-  border: 0;
+  width: 316px;
+  height: 88px;
+  transform: scale(var(--slot-ui-scale));
+  transform-origin: top right;
+  border: 1px solid rgba(95, 235, 255, .42);
+  border-radius: 12px;
   padding: 0;
-  background: transparent;
+  background: rgba(2, 8, 17, .88);
   color: inherit;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .36), inset 0 0 22px rgba(39, 231, 255, .04);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
 }
 
 .race-hud-control::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 18px;
+  border-radius: 12px;
+}
+
+.game-fps {
+  position: absolute;
+  top: 13px;
+  left: 28px;
+  color: rgba(141, 239, 255, .78);
+  font: 900 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .5px;
+  text-shadow: 0 0 6px rgba(55, 228, 255, .36), 0 1px 1px rgba(0, 0, 0, .8);
+  pointer-events: none;
+}
+
+.game-lap-count {
+  position: absolute;
+  top: 13px;
+  right: 28px;
+  color: rgba(141, 239, 255, .88);
+  font: 900 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .4px;
+  text-align: right;
+  text-shadow: 0 0 6px rgba(55, 228, 255, .28), 0 1px 1px rgba(0, 0, 0, .8);
+  pointer-events: none;
 }
 
 .game-lap-time {
   position: absolute;
-  top: 4px;
+  top: 15px;
   left: 50%;
   transform: translateX(-50%);
   color: #f7feff;
-  font: 900 46px/1 Arial Black, Arial, sans-serif;
-  letter-spacing: .05em;
-  text-shadow: 0 0 8px rgba(55, 228, 255, .72), 0 0 20px rgba(55, 228, 255, .28), 0 2px 2px rgba(0, 0, 0, .85);
+  font: 900 30px/1 Arial Black, Arial, sans-serif;
+  letter-spacing: .03em;
+  text-shadow: 0 0 7px rgba(55, 228, 255, .64), 0 0 16px rgba(55, 228, 255, .2), 0 2px 2px rgba(0, 0, 0, .85);
   pointer-events: none;
 }
 
-.race-session-total-hidden { display: none; }
+.game-best-time,
+.game-total-time {
+  position: absolute;
+  top: 51px;
+  color: rgba(226, 249, 255, .74);
+  font: 900 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .6px;
+  text-align: right;
+  text-shadow: 0 0 6px rgba(55, 228, 255, .22), 0 1px 1px rgba(0, 0, 0, .8);
+  pointer-events: none;
+}
+
+.game-best-time {
+  left: 28px;
+  text-align: left;
+}
+
+.game-total-time {
+  right: 28px;
+}
+
+.race-session-hud-plate,
+.race-session-lap,
+.race-session-stats,
+.race-session-total-hidden {
+  display: none;
+}
 
 @media (max-width: 760px) {
   .race-hud-control {
     top: 8px;
-    width: min(440px, 80vw);
-    height: 112px;
+    right: max(8px, env(safe-area-inset-right));
+    width: min(284px, 72vw);
+    min-width: 220px;
+    height: 70px;
   }
 
   .game-lap-time {
-    font-size: clamp(32px, 8vw, 46px);
+    top: 17px;
+    font-size: clamp(18px, 4.8vw, 24px);
+    letter-spacing: .01em;
+  }
+
+  .game-fps {
+    top: 10px;
+    left: 18px;
+    font-size: 7px;
+    letter-spacing: 0;
+  }
+
+  .game-lap-count {
+    top: 10px;
+    right: 18px;
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+
+  .game-best-time,
+  .game-total-time {
+    right: 18px;
+    top: 45px;
+    max-width: calc(100% - 36px);
+    font-size: 8px;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+
+  .game-best-time {
+    left: 18px;
+    right: auto;
+  }
+}
+
+@media (max-width: 420px), (max-height: 430px) {
+  .race-hud-control {
+    right: max(7px, env(safe-area-inset-right));
+    width: min(250px, 68vw);
+    min-width: 198px;
+    height: 62px;
+  }
+
+  .game-lap-time {
+    top: 16px;
+    font-size: clamp(16px, 4.4vw, 20px);
+  }
+
+  .game-best-time,
+  .game-total-time {
+    top: 40px;
+    right: 15px;
+    font-size: 7px;
+  }
+
+  .game-best-time {
+    left: 15px;
+    right: auto;
+  }
+
+  .game-fps {
+    top: 9px;
+    left: 15px;
+    font-size: 6.5px;
+  }
+
+  .game-lap-count {
+    top: 9px;
+    right: 15px;
+    font-size: 7px;
   }
 }

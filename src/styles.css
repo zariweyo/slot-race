@@ -6,6 +6,19 @@ html, body, #app {
   margin: 0;
 }
 
+:root {
+  --slot-vw: 100vw;
+  --slot-vh: 100vh;
+  --slot-safe-left: env(safe-area-inset-left, 0px);
+  --slot-safe-right: env(safe-area-inset-right, 0px);
+  --slot-safe-top: env(safe-area-inset-top, 0px);
+  --slot-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --slot-visible-width: calc(var(--slot-vw) - var(--slot-safe-left) - var(--slot-safe-right));
+  --slot-visible-height: calc(var(--slot-vh) - var(--slot-safe-top) - var(--slot-safe-bottom));
+  --slot-ui-scale: 1;
+  --slot-modal-scale: 1;
+}
+
 body {
   overflow: hidden;
   background: #010207;
@@ -17,8 +30,13 @@ body {
 }
 
 .game-shell {
-  width: 100%;
-  height: 100%;
+  width: var(--slot-vw);
+  height: var(--slot-vh);
+  padding:
+    var(--slot-safe-top)
+    var(--slot-safe-right)
+    var(--slot-safe-bottom)
+    var(--slot-safe-left);
   display: grid;
   place-items: center;
   background: #010207;
@@ -27,8 +45,10 @@ body {
 
 .game-viewport {
   position: relative;
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
+  width: min(var(--slot-visible-width), calc(var(--slot-visible-height) * 16 / 9));
+  height: min(var(--slot-visible-height), calc(var(--slot-visible-width) * 9 / 16));
+  max-width: 100%;
+  max-height: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: #010207;
@@ -129,12 +149,18 @@ body {
 
 .track-editor-modal {
   position: fixed;
-  inset: 0;
+  inset: 0 auto auto 0;
   z-index: 5000;
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 18px;
+  width: var(--slot-vw);
+  height: var(--slot-vh);
+  padding:
+    max(10px, var(--slot-safe-top))
+    max(10px, var(--slot-safe-right))
+    max(10px, var(--slot-safe-bottom))
+    max(10px, var(--slot-safe-left));
   background: rgba(0, 2, 8, .74);
   backdrop-filter: blur(8px);
   touch-action: pan-y;
@@ -142,12 +168,12 @@ body {
 .track-editor-modal.open { display: flex; }
 
 .track-editor-panel {
-  width: min(1160px, 97vw);
-  height: min(760px, 94vh);
-  min-width: min(760px, 97vw);
-  min-height: 520px;
-  max-width: 97vw;
-  max-height: 94vh;
+  width: min(1160px, calc((var(--slot-vw) - 20px) / var(--slot-modal-scale)));
+  height: min(760px, calc((var(--slot-vh) - 20px) / var(--slot-modal-scale)));
+  min-width: 0;
+  min-height: 0;
+  max-width: calc((var(--slot-vw) - 20px) / var(--slot-modal-scale));
+  max-height: calc((var(--slot-vh) - 20px) / var(--slot-modal-scale));
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(124, 238, 255, .35);
@@ -156,6 +182,8 @@ body {
   background: rgba(5, 11, 22, .98);
   box-shadow: 0 24px 80px rgba(0, 0, 0, .6), 0 0 40px rgba(38, 207, 255, .1);
   resize: both;
+  transform: scale(var(--slot-modal-scale));
+  transform-origin: center;
 }
 
 .track-editor-header,
@@ -363,8 +391,8 @@ body {
 @media (max-width: 760px) {
   .track-editor-modal { padding: 0; backdrop-filter: none; }
   .track-editor-panel {
-    width: 100%;
-    height: 100dvh;
+    width: calc(var(--slot-vw) / var(--slot-modal-scale));
+    height: calc(var(--slot-vh) / var(--slot-modal-scale));
     min-width: 0;
     min-height: 0;
     max-width: none;
@@ -397,6 +425,32 @@ body {
   }
   .track-editor-load-group { grid-column: 1 / 3; min-width: 0; }
   .track-editor-status { text-align: left; }
+}
+
+@media (max-width: 760px), (max-height: 520px) {
+  .track-editor-header,
+  .track-editor-footer,
+  .track-editor-meta {
+    gap: 5px;
+    padding: 6px 8px;
+  }
+
+  .track-editor-header h2 { font-size: 14px; }
+  .track-editor-kicker { font-size: 7px; letter-spacing: 1.2px; }
+
+  .track-editor-panel button,
+  .track-editor-panel select,
+  .track-editor-panel input {
+    min-height: 24px;
+    padding: 3px 5px;
+    font-size: 9px;
+  }
+
+  .track-editor-workspace { grid-template-rows: 150px minmax(0, 1fr); }
+  .track-editor-section-head { min-height: 30px; padding: 4px 7px; }
+  .track-editor-section-head strong { font-size: 10px; }
+  .track-editor-row { min-height: 45px; }
+  .track-editor-fields input { width: 58px; }
 }
 
 @media (max-width: 480px) {

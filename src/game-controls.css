@@ -1,7 +1,5 @@
 .rail-controls,
-.rail-control,
-.race-script-open,
-.track-editor-open {
+.rail-control {
   display: none !important;
 }
 

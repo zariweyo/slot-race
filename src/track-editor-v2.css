@@ -71,3 +71,20 @@
   .track-editor-row { grid-template-columns: 26px 96px minmax(130px,1fr) 34px !important; min-height: 52px; }
   .track-editor-fields { grid-column: auto !important; grid-row: auto !important; }
 }
+
+@media (max-width: 760px), (max-height: 520px) {
+  .track-editor-header { min-height: 42px; }
+  .track-editor-tabs button { min-height: 28px; padding: 4px 7px; font-size: 8px; }
+  .track-editor-settings-button, .track-editor-close { width: 30px; min-height: 28px; }
+  .track-editor-preview .track-editor-section-head { min-height: 30px; }
+  .track-editor-slot-toolbar { top: 5px; left: 5px; gap: 4px; padding: 4px 5px; }
+  .track-editor-slot-toolbar span { max-width: 135px; font-size: 8px; }
+  .track-editor-slot-toolbar button { width: 26px; min-height: 26px; font-size: 14px; }
+  .track-editor-add-popup { top: 39px; left: 5px; gap: 4px; padding: 7px; }
+  .track-editor-add-popup button { min-height: 27px; }
+  .track-editor-settings-panel { top: 40px; max-height: calc(100% - 44px); }
+  .track-editor-settings-title { padding: 7px 9px; }
+  .track-editor-settings-title strong { font-size: 11px; }
+  .track-editor-row { grid-template-columns: 24px 88px minmax(110px,1fr) 30px !important; min-height: 44px; }
+  .track-editor-row > button.danger { width: 26px; min-height: 26px; font-size: 13px; }
+}

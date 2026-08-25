@@ -37,12 +37,20 @@
         <div id="level-stack" class="level-stack"></div>
         <div id="pixi-ui" class="pixi-ui"></div>
 
-        <button id="race-script-open" class="race-script-open" type="button">RACE SCRIPT</button>
-        <button id="track-editor-open" class="track-editor-open" type="button">EDITOR DE PISTA</button>
+        <div class="game-launcher" aria-label="Herramientas de carrera">
+          <button id="race-script-open" class="game-launcher-button race-script-open" type="button">
+            <span class="game-launcher-icon" aria-hidden="true">RS</span>
+            <span class="game-launcher-copy"><strong>Race Script</strong><small>programar rail</small></span>
+          </button>
+          <button id="track-editor-open" class="game-launcher-button track-editor-open" type="button">
+            <span class="game-launcher-icon" aria-hidden="true">TR</span>
+            <span class="game-launcher-copy"><strong>Editor</strong><small>editar pista</small></span>
+          </button>
+        </div>
         <div id="pixi-boot" class="pixi-boot">BOOTING PIXI…</div>
       </div>
 
-      <div id="race-script-modal" class="race-script-modal open" aria-hidden="false">
+      <div id="race-script-modal" class="race-script-modal" aria-hidden="true">
         <section id="race-script" class="race-script-panel" role="dialog" aria-modal="true" aria-labelledby="race-script-title">
           <header class="race-script-header">
             <div>
@@ -90,6 +98,7 @@
       </div>
     </div>
     <script type="module" src="/src/editor-pause.ts"></script>
+    <script type="module" src="/src/viewport-size.ts"></script>
     <script type="module" src="/src/editor-drag-throttle.ts"></script>
     <script type="module" src="/src/editor-ui-enhancements.ts"></script>
     <script type="module" src="/src/editor-slot-controls.ts"></script>
